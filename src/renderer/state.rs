@@ -1,4 +1,5 @@
 use crate::renderer::feature_uniform::{FeatureUniform, TransformAction};
+use crate::renderer::mouse_state::MouseState;
 use crate::{
     png::grammar::Png,
     renderer::{Texture, Vertex},
@@ -69,6 +70,8 @@ struct State<'a> {
     feature_uniform: FeatureUniform,
     feature_buffer: Buffer,
     feature_bind_group: BindGroup,
+
+    mouse_state: MouseState,
 }
 
 impl<'a> State<'a> {
@@ -280,6 +283,8 @@ impl<'a> State<'a> {
         });
         let num_indices = INDICES.len() as u32;
 
+        let mouse_state = MouseState::default();
+
         Ok(Self {
             surface,
             device,
@@ -296,6 +301,7 @@ impl<'a> State<'a> {
             feature_uniform,
             feature_buffer,
             feature_bind_group,
+            mouse_state,
         })
     }
 
@@ -319,6 +325,8 @@ impl<'a> State<'a> {
             self.config.width = new_size.width;
             self.config.height = new_size.height;
             self.surface.configure(&self.device, &self.config);
+            self.feature_uniform
+                .update_window_dimensions(self.config.width, self.config.height);
         }
     }
 
@@ -326,6 +334,37 @@ impl<'a> State<'a> {
         let feature_uniform = &mut self.feature_uniform;
 
         match event {
+            WindowEvent::MouseInput { state, button, .. } => {
+                if feature_uniform.crosshair() && *button == MouseButton::Left {
+                    let prev_state = self.mouse_state.pressed();
+
+                    self.mouse_state
+                        .set_pressed(matches!(state, ElementState::Pressed));
+
+                    match (prev_state, self.mouse_state.pressed()) {
+                        (false, true) => {
+                            self.window.set_cursor_icon(CursorIcon::Crosshair);
+                            feature_uniform.set_drag(true);
+
+                            let (start_x, start_y) = self.mouse_state.position();
+                            feature_uniform.set_start_drag_position(start_x, start_y);
+                        }
+                        (true, false) => {
+                            feature_uniform.set_drag(false);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                let (x, y) = (position.x as f32, position.y as f32);
+
+                self.mouse_state.update_position(x, y);
+
+                if self.mouse_state.pressed() {
+                    feature_uniform.compute_drag_radius(x, y);
+                }
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -335,6 +374,15 @@ impl<'a> State<'a> {
                     },
                 ..
             } => match (keycode, state) {
+                (KeyCode::KeyA, ElementState::Pressed) => {
+                    feature_uniform.toggle_crosshair();
+
+                    if feature_uniform.crosshair() {
+                        self.window.set_cursor_icon(CursorIcon::Crosshair);
+                    } else {
+                        self.window.set_cursor_icon(CursorIcon::Default);
+                    }
+                }
                 (KeyCode::KeyC, ElementState::Pressed) => {
                     feature_uniform.reset_features();
                 }

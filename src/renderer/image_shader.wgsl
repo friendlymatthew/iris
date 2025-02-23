@@ -12,6 +12,12 @@ struct FeatureUniform {
     sharpen_factor: u32,
     edge_detect: u32,
     transform: mat4x4<f32>,
+    drag: u32,
+    drag_start_x: f32,
+    drag_start_y: f32,
+    drag_radius: f32,
+
+    crosshair: u32,
 };
 
 
@@ -177,6 +183,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
             1.0 - pixels.b,
             pixels.a
         );
+    }
+
+    if feature_uniform.drag == 1u {
+        var pixel_coords = in.tex_coords * vec2(f32(feature_uniform.width), f32(feature_uniform.height));
+        var mouse_pixel = vec2(feature_uniform.drag_start_x, feature_uniform.drag_start_y);
+
+        if distance(pixel_coords, mouse_pixel) < feature_uniform.drag_radius {
+            pixels.r = 0.0;
+            pixels.g = 1.0;
+            pixels.b = 1.0;
+        }
     }
 
     return pixels;

@@ -12,8 +12,14 @@ pub struct FeatureUniform {
     sharpen: u32,
     sharpen_factor: u32,
     edge_detect: u32,
-    _padding: [u8; 8],
+    _padding_1: [u8; 8],
     transform: TransformMatrix,
+    drag: u32,
+    drag_start_x: f32,
+    drag_start_y: f32,
+    drag_radius: f32,
+    _padding_2: [u8; 12],
+    crosshair: u32,
 }
 
 impl FeatureUniform {
@@ -30,8 +36,14 @@ impl FeatureUniform {
             sharpen: 0,
             sharpen_factor: Self::DEFAULT_SHARPEN_FACTOR,
             edge_detect: 0,
-            _padding: [0u8; 8],
+            _padding_1: [0u8; 8],
             transform: Self::TRANSFORM_IDENTITY,
+            drag: 0,
+            drag_start_x: 0.0,
+            drag_start_y: 0.0,
+            drag_radius: 0.0,
+            _padding_2: [0u8; 12],
+            crosshair: 0,
         }
     }
 
@@ -43,6 +55,8 @@ impl FeatureUniform {
         self.sharpen = 0;
         self.edge_detect = 0;
         self.transform = Self::TRANSFORM_IDENTITY;
+        self.drag = 0;
+        self.crosshair = 0;
     }
 }
 
@@ -117,6 +131,13 @@ impl FeatureUniform {
 }
 
 impl FeatureUniform {
+    pub(crate) fn update_window_dimensions(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+    }
+}
+
+impl FeatureUniform {
     pub(crate) const fn edge_detect(&self) -> bool {
         self.edge_detect == 1
     }
@@ -175,5 +196,29 @@ impl FeatureUniform {
                 self.transform[r][c] *= ch;
             }
         }
+    }
+}
+
+impl FeatureUniform {
+    pub(crate) fn crosshair(&self) -> bool {
+        self.crosshair == 1
+    }
+
+    pub(crate) fn toggle_crosshair(&mut self) {
+        self.crosshair = !self.crosshair() as u32;
+    }
+
+    pub(crate) fn set_drag(&mut self, state: bool) {
+        self.drag = state as u32;
+    }
+
+    pub(crate) fn set_start_drag_position(&mut self, x: f32, y: f32) {
+        self.drag_start_x = x;
+        self.drag_start_y = y;
+    }
+
+    pub(crate) fn compute_drag_radius(&mut self, x: f32, y: f32) {
+        self.drag_radius =
+            ((self.drag_start_x - x).powi(2) + (self.drag_start_y - y).powi(2)).sqrt()
     }
 }
