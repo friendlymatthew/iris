@@ -1,4 +1,4 @@
-use crate::grammar::Png;
+use crate::png::grammar::Png;
 use anyhow::*;
 use wgpu::{
     AddressMode, Device, Extent3d, FilterMode, ImageCopyTexture, ImageDataLayout, Origin3d, Queue,

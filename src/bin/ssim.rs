@@ -1,11 +1,11 @@
 use anyhow::{anyhow, Result};
-use png::{Decoder, Png};
+use her::png::{grammar::Png, PngDecoder};
 use std::fs;
 use std::time::Instant;
 
 fn read_png(image_path: &str) -> Result<Png> {
     let image_data = fs::read(image_path)?;
-    let image = Decoder::new(&image_data).decode()?;
+    let image = PngDecoder::new(&image_data).decode()?;
 
     Ok(image)
 }

@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
-use png::Decoder;
+use her::png::PngDecoder;
 
 #[cfg(feature = "time")]
-use png::util::*;
+use her::util::*;
 
 #[cfg(feature = "time")]
 use std::time::Instant;
@@ -15,7 +15,7 @@ fn main() -> Result<()> {
 
     let content = std::fs::read(image_path)?;
 
-    let mut decoder = Decoder::new(&content);
+    let mut decoder = PngDecoder::new(&content);
 
     #[cfg(feature = "time")]
     let a = Instant::now();

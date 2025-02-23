@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use png::{renderer, Decoder};
+use her::{png::PngDecoder, renderer};
 use pollster::block_on;
 
 fn main() -> Result<()> {
@@ -9,7 +9,7 @@ fn main() -> Result<()> {
         .ok_or_else(|| anyhow!("Failed to read image path"))?;
 
     let content = std::fs::read(image_path)?;
-    let mut decoder = Decoder::new(&content);
+    let mut decoder = PngDecoder::new(&content);
     let png = decoder.decode()?;
 
     let _ = block_on(renderer::run(png));

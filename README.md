@@ -1,26 +1,21 @@
-# png
+# her
 
 <p align="center">
-    <img src="tests/diaz_gray.png" alt="Gray Nick Diaz" width="220"/>
     <img src="tests/diaz.png" alt="Nick Diaz" width="220"/>
     <img src="tests/diaz_blur.png" alt="Blur Nick Diaz" width="220"/>
-    <img src="tests/diaz_sobel.png" alt="Sobel Edge Detection Nick Diaz" width="220"/>
     <img src="tests/diaz_sharpen.png" alt="Sharpen Diaz" width="220"/>
-    <img src="tests/diaz_invert.png" alt="Invert Nick Diaz" width="220"/>
 </p>
 <br>
 
-This project aims to provide a PNG decoder backed by a feature-rich GPU-based renderer.
+A PNG editor from scratch (well, as close to scratch as possible).
 
-As a decoder, this project uses the [PNG test suite](http://www.schaik.com/pngsuite/) to validate its ability to handle
-various PNG features and edge cases. Currently, `png` can decode and render images with an 8-bit color depth.
+As a decoder, this project uses the [PNG test suite](http://www.schaik.com/pngsuite/) to validate its ability to handle various PNG features and edge cases. Currently, png can decode and render images with an 8-bit color depth.
 
-The renderer handles various image processing features on the GPU. To view all possible features,
-see [FEATURES](https://github.com/friendlymatthew/png/tree/main/features#readme).
+The renderer supports various image processing features on the GPU. For a detailed look at its features, visit [FEATURES](https://github.com/friendlymatthew/png/tree/main/features#readme).
 
 ## Usage
 
-To render an image, run `cargo run --release <image_path>`. For example:
+Run `cargo run --release <image_path>`. For example:
 
 ```bash
 cargo r --release ./tests/obama.png
@@ -64,6 +59,11 @@ http://arxiv.org/pdf/2006.13846<br>
 
 https://www.youtube.com/watch?v=KuXjwB4LzSA<br>
 https://www.shadertoy.com/view/4tSyzy<br>
+
+### Typography
+
+https://faultlore.com/blah/text-hates-you/<br>
+https://developer.apple.com/fonts/TrueType-Reference-Manual/<br>
 
 ### Miscellaneous
 

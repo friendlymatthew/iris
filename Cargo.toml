@@ -1,14 +1,27 @@
 [package]
-name = "png"
+name = "her"
 authors = ["Matthew Kim"]
 version = "0.1.0"
 edition = "2021"
+description = "An image editor written from scratch (as close as possible)."
+readme = "https://github.com/friendlymatthew/her/blob/main/README.md"
+repository = "https://github.com/friendlymatthew/her/"
 default-run = "render"
 resolver = "2"
+license = "MIT"
+exclude = [
+    "tests/*",
+    "test_suite/*",
+    "fuzz/*",
+    "features/*",
+    "fuzz.sh",
+    "profile.sh",
+    ".github/",
+]
 
 [[bin]]
 name = "render"
-path = "src/bin/render.rs"
+path = "src/main.rs"
 
 [[bin]]
 name = "decode"
@@ -57,9 +70,4 @@ console_log = "1.0"
 wgpu = { version = "22.0", features = ["webgl"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = [
-    "Document",
-    "Window",
-    "Element",
-] }
-
+web-sys = { version = "0.3", features = ["Document", "Window", "Element"] }

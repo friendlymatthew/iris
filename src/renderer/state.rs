@@ -1,7 +1,7 @@
 use crate::renderer::feature_uniform::{FeatureUniform, TransformAction};
 use crate::{
+    png::grammar::Png,
     renderer::{Texture, Vertex},
-    Png,
 };
 use anyhow::{anyhow, Result};
 use std::iter;
@@ -18,6 +18,7 @@ use wgpu::{
     ShaderSource, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError,
     TextureSampleType, TextureUsages, TextureViewDescriptor, TextureViewDimension, VertexState,
 };
+use winit::window::CursorIcon;
 use winit::{
     dpi::PhysicalSize,
     event::*,
@@ -336,11 +337,9 @@ impl<'a> State<'a> {
             } => match (keycode, state) {
                 (KeyCode::KeyC, ElementState::Pressed) => {
                     feature_uniform.reset_features();
-                    true
                 }
                 (KeyCode::KeyB, ElementState::Pressed) => {
                     feature_uniform.toggle_blur();
-                    true
                 }
                 (KeyCode::ArrowUp, ElementState::Pressed) => {
                     if feature_uniform.blur() {
@@ -350,8 +349,6 @@ impl<'a> State<'a> {
                     if feature_uniform.sharpen() {
                         feature_uniform.increase_sharpen_factor();
                     }
-
-                    true
                 }
                 (KeyCode::ArrowDown, ElementState::Pressed) => {
                     if feature_uniform.blur() {
@@ -361,39 +358,31 @@ impl<'a> State<'a> {
                     if feature_uniform.sharpen() {
                         feature_uniform.decrease_sharpen_factor();
                     }
-
-                    true
                 }
                 (KeyCode::KeyG, ElementState::Pressed) => {
                     feature_uniform.toggle_grayscale();
-                    true
                 }
                 (KeyCode::KeyS, ElementState::Pressed) => {
                     feature_uniform.toggle_sharpen();
-                    true
                 }
                 (KeyCode::KeyI, ElementState::Pressed) => {
                     feature_uniform.toggle_invert();
-                    true
                 }
                 (KeyCode::KeyE, ElementState::Pressed) => {
                     feature_uniform.toggle_edge_detect();
-                    true
                 }
                 (KeyCode::KeyX, ElementState::Pressed) => {
                     feature_uniform.apply_transform(TransformAction::FlipX);
-
-                    true
                 }
                 (KeyCode::KeyY, ElementState::Pressed) => {
                     feature_uniform.apply_transform(TransformAction::FlipY);
-
-                    true
                 }
-                _ => false,
+                _ => return false,
             },
-            _ => false,
+            _ => return false,
         }
+
+        true
     }
 
     fn update(&self) {
@@ -470,7 +459,7 @@ pub async fn run(png: Png) -> anyhow::Result<()> {
 
     let window = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(width, height))
-        .with_title("friendlymatthew/png")
+        .with_title("friendlymatthew/her")
         .build(&event_loop)?;
 
     #[cfg(target_arch = "wasm32")]

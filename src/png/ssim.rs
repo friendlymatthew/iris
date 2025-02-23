@@ -1,6 +1,6 @@
 #![allow(clippy::suboptimal_flops)]
 
-use crate::{ColorType, Png};
+use crate::png::grammar::{ColorType, Png};
 use anyhow::ensure;
 
 const K1: f32 = 0.01;

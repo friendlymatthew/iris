@@ -4,21 +4,24 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::Read;
 
-use crate::{crc32::compute_crc, Chunk, ColorType, ImageHeader, Png};
+use crate::png::{
+    crc32::compute_crc,
+    grammar::{Chunk, ColorType, ImageHeader, Png},
+};
 
-use crate::scanline_reader::ScanlineReader;
+use crate::png::scanline_reader::ScanlineReader;
 #[cfg(feature = "time")]
 use crate::util::{log_event, Event};
 #[cfg(feature = "time")]
 use std::time::Instant;
 
 #[derive(Debug)]
-pub struct Decoder<'a> {
+pub struct PngDecoder<'a> {
     cursor: usize,
     data: &'a [u8],
 }
 
-impl<'a> Decoder<'a> {
+impl<'a> PngDecoder<'a> {
     pub const fn new(data: &'a [u8]) -> Self {
         Self { cursor: 0, data }
     }
@@ -290,7 +293,7 @@ mod tests {
     #[allow(dead_code)]
     fn generate_blob(path: &str) -> Result<()> {
         let content = std::fs::read(format!("{}.png", path))?;
-        let png = Decoder::new(&content).decode()?;
+        let png = PngDecoder::new(&content).decode()?;
 
         png.write_to_binary_blob(path)?;
 
@@ -306,7 +309,7 @@ mod tests {
         let reference_rgbs = ImageReader::open(&path)?.decode()?.to_rgb8().to_vec();
 
         let content = std::fs::read(&path)?;
-        let generated_png = Decoder::new(&content).decode()?;
+        let generated_png = PngDecoder::new(&content).decode()?;
         let generated_rgbs = generated_png.to_rgb8().to_vec();
 
         assert_eq!(

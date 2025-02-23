@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use comfy_table::{Attribute, Cell, Color, Table};
-use png::test_file_parser::{parse_test_file, PNGSuiteTestCase};
-use png::{Decoder, Png};
+use her::png::{grammar::Png, PngDecoder};
+use her::test_file_parser::{parse_test_file, PNGSuiteTestCase};
 use std::ffi::OsStr;
 use std::{fmt, fs, panic};
 
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
 
             let content = fs::read(&path)?;
 
-            let png_res = panic::catch_unwind(|| Decoder::new(&content).decode());
+            let png_res = panic::catch_unwind(|| PngDecoder::new(&content).decode());
 
             let status = match png_res {
                 Err(panic_info) => {
