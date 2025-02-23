@@ -16,8 +16,6 @@ struct FeatureUniform {
     drag_start_x: f32,
     drag_start_y: f32,
     drag_radius: f32,
-
-    crosshair: u32,
 };
 
 

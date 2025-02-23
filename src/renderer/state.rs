@@ -335,11 +335,15 @@ impl<'a> State<'a> {
 
         match event {
             WindowEvent::MouseInput { state, button, .. } => {
-                if feature_uniform.crosshair() && *button == MouseButton::Left {
+                if *button == MouseButton::Left {
                     let prev_state = self.mouse_state.pressed();
 
                     self.mouse_state
                         .set_pressed(matches!(state, ElementState::Pressed));
+
+                    if !feature_uniform.crosshair() {
+                        return true;
+                    }
 
                     match (prev_state, self.mouse_state.pressed()) {
                         (false, true) => {
