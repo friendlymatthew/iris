@@ -120,7 +120,7 @@ impl<'a> TableTag<'a> {
 #[derive(Debug)]
 pub struct TableRecord<'a> {
     pub(crate) table_tag: TableTag<'a>,
-    pub(crate) checksum: u32,
+    pub(crate) _checksum: u32,
     pub(crate) offset: u32,
     pub(crate) length: u32,
 }
@@ -175,6 +175,12 @@ pub struct HHea {
     pub(crate) num_of_long_hor_metrics: u16,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum GlyphCoordUnit {
+    I8(i8),
+    I16(i16),
+}
+
 #[derive(Debug)]
 pub struct Glyph {
     pub(crate) number_of_contours: i16,
@@ -183,33 +189,34 @@ pub struct Glyph {
     pub(crate) x_max: FWord,
     pub(crate) y_max: FWord,
     pub(crate) flags: Vec<GlyphFlag>,
+    pub(crate) coordinates: Vec<(GlyphCoordUnit, GlyphCoordUnit)>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct GlyphFlag(pub u8);
 
 impl GlyphFlag {
-    pub(crate) const fn on_curve(&self) -> bool {
+    pub const fn on_curve(&self) -> bool {
         self.0 & 0b1 == 1
     }
 
-    pub(crate) const fn x_short_vector(&self) -> bool {
+    pub const fn x_short_vector(&self) -> bool {
         (self.0 & 0b10) >> 1 == 1
     }
 
-    pub(crate) const fn y_short_vector(&self) -> bool {
+    pub const fn y_short_vector(&self) -> bool {
         (self.0 & 0b100) >> 2 == 1
     }
 
-    pub(crate) const fn should_repeat(&self) -> bool {
+    pub const fn should_repeat(&self) -> bool {
         (self.0 & 0b1000) >> 3 == 1
     }
 
-    pub(crate) const fn repeat_or_sign_x_short_vector(&self) -> bool {
+    pub const fn repeat_or_sign_x_short_vector(&self) -> bool {
         (self.0 & 0b10000) >> 4 == 1
     }
 
-    pub(crate) const fn repeat_or_sign_y_short_vector(&self) -> bool {
+    pub const fn repeat_or_sign_y_short_vector(&self) -> bool {
         (self.0 & 0b100000) >> 5 == 1
     }
 }

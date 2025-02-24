@@ -4,9 +4,14 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::Read;
 
-use crate::png::{
-    crc32::compute_crc,
-    grammar::{Chunk, ColorType, ImageHeader, Png},
+use crate::{
+    eof,
+    png::{
+        crc32::compute_crc,
+        grammar::{Chunk, ColorType, ImageHeader, Png},
+    },
+    read,
+    util::read_bytes::{U32_BYTES, U8_BYTES},
 };
 
 use crate::png::scanline_reader::ScanlineReader;
@@ -230,39 +235,9 @@ impl<'a> PngDecoder<'a> {
         Ok(())
     }
 
-    fn eof(&self, len: usize) -> Result<()> {
-        let end = self.data.len();
-
-        ensure!(
-            self.cursor + len.saturating_sub(1) < self.data.len(),
-            "Unexpected EOF. At {}, seek by {}, buffer size: {}.",
-            self.cursor,
-            len,
-            end
-        );
-
-        Ok(())
-    }
-
-    fn read_u8(&mut self) -> Result<u8> {
-        self.eof(0)?;
-
-        let b = self.data[self.cursor];
-        self.cursor += 1;
-
-        Ok(b)
-    }
-
-    fn read_u32(&mut self) -> Result<u32> {
-        self.eof(4)?;
-
-        let slice = &self.data[self.cursor..self.cursor + 4];
-        let n = u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]);
-
-        self.cursor += 4;
-
-        Ok(n)
-    }
+    eof!();
+    read!(read_u8, u8, U8_BYTES);
+    read!(read_u32, u32, U32_BYTES);
 
     fn read_slice(&mut self, len: usize) -> Result<&'a [u8]> {
         self.eof(len)?;
@@ -285,7 +260,7 @@ impl<'a> PngDecoder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_file_parser::parse_test_file;
+    use crate::util::test_file_parser::parse_test_file;
     use anyhow::anyhow;
     use image::ImageReader;
     use pretty_assertions::assert_eq;

@@ -6,5 +6,4 @@ use wasm_bindgen::prelude::*;
 pub mod font;
 pub mod png;
 pub mod renderer;
-pub mod test_file_parser;
 pub mod util;

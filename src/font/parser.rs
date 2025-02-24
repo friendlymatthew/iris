@@ -1,28 +1,11 @@
 use crate::font::grammar::{
-    F2Dot14, FWord, Fixed, FontDirectory, Glyph, GlyphFlag, HHea, Head, LongDateTime,
-    OffsetSubTable, ScalarType, ShortFrac, Table, TableRecord, TableTag, TrueTypeFontFile,
-    UnsignedFWord,
+    FWord, Fixed, FontDirectory, Glyph, GlyphCoordUnit, GlyphFlag, HHea, Head, LongDateTime,
+    OffsetSubTable, ScalarType, Table, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
 };
+
+use crate::util::read_bytes::{U16_BYTES, U32_BYTES, U64_BYTES, U8_BYTES};
+use crate::{eof, read};
 use anyhow::{anyhow, ensure, Result};
-
-const U8_BYTES: usize = size_of::<u8>();
-const U16_BYTES: usize = size_of::<u16>();
-const U32_BYTES: usize = size_of::<u32>();
-const U64_BYTES: usize = size_of::<u64>();
-
-macro_rules! read {
-    ($name:ident, $type:ty, $size:expr) => {
-        fn $name(&mut self) -> Result<$type> {
-            self.eof($size)?;
-
-            let slice = &self.data[self.cursor..self.cursor + $size];
-            let b = <$type>::from_be_bytes(slice.try_into()?);
-            self.cursor += $size;
-
-            Ok(b)
-        }
-    };
-}
 
 #[derive(Debug)]
 pub struct TrueTypeFontParser<'a> {
@@ -82,7 +65,7 @@ impl<'a> TrueTypeFontParser<'a> {
 
             table_directory.push(TableRecord {
                 table_tag: TableTag::try_from(self.read_slice::<U32_BYTES>()?)?,
-                checksum: self.read_u32()?,
+                _checksum: self.read_u32()?,
                 offset: self.read_u32()?,
                 length: self.read_u32()?,
             });
@@ -190,16 +173,20 @@ impl<'a> TrueTypeFontParser<'a> {
     }
 
     fn parse_glyph(&mut self) -> Result<Glyph> {
-        let number_of_contours = self.read_i16()?;
-        let _x_min = self.read_fword()?;
-        let _y_min = self.read_fword()?;
-        let _x_max = self.read_fword()?;
-        let _y_max = self.read_fword()?;
+        let mut glyph_table = Glyph {
+            number_of_contours: self.read_i16()?,
+            x_min: self.read_fword()?,
+            y_min: self.read_fword()?,
+            x_max: self.read_fword()?,
+            y_max: self.read_fword()?,
+            flags: vec![],
+            coordinates: vec![],
+        };
 
-        if number_of_contours < 0 {
+        if glyph_table.number_of_contours < 0 {
             todo!("How does a compound glyph parse?")
         } else {
-            let number_of_contours = number_of_contours as usize;
+            let number_of_contours = glyph_table.number_of_contours as usize;
             let mut end_points_of_contours = Vec::with_capacity(number_of_contours);
             for _ in 0..number_of_contours {
                 end_points_of_contours.push(self.read_u16()?);
@@ -214,7 +201,8 @@ impl<'a> TrueTypeFontParser<'a> {
             let number_of_points = *end_points_of_contours
                 .last()
                 .ok_or_else(|| anyhow!("Expect at least one point of contour."))?
-                as usize;
+                as usize
+                + 1;
 
             let mut flags = Vec::new();
 
@@ -229,25 +217,78 @@ impl<'a> TrueTypeFontParser<'a> {
                 }
             }
 
-            dbg!(instructions, flags);
+            let mut x_coordinates = vec![GlyphCoordUnit::I8(0)]; // since the first element is relative to (0, 0)
+
+            for flag in &flags {
+                if let Some(glyph_coord) = self.parse_glyph_coordinate(
+                    flag.x_short_vector(),
+                    flag.repeat_or_sign_x_short_vector(),
+                )? {
+                    x_coordinates.push(glyph_coord);
+                    continue;
+                }
+
+                ensure!(
+                    x_coordinates.len() > 0,
+                    "Need repeated glyph x coordinate but empty coordinates."
+                );
+                x_coordinates.push(*x_coordinates.last().unwrap());
+            }
+
+            dbg!(&x_coordinates);
+
+            let mut y_coordinates = vec![GlyphCoordUnit::I8(0)]; // since first element is relative to (0, 0)
+            for flag in &flags {
+                if let Some(glyph_coord) = self.parse_glyph_coordinate(
+                    flag.y_short_vector(),
+                    flag.repeat_or_sign_y_short_vector(),
+                )? {
+                    y_coordinates.push(glyph_coord);
+                    continue;
+                }
+
+                ensure!(
+                    y_coordinates.len() > 0,
+                    "Need repeated glyph y coordinate but empty coordinates."
+                );
+                y_coordinates.push(*y_coordinates.last().unwrap());
+            }
+
+            glyph_table.flags = flags;
+            glyph_table.coordinates = x_coordinates.into_iter().zip(y_coordinates).collect();
         }
 
-        todo!("what do glyph tables look like?")
+        Ok(glyph_table)
     }
 
-    fn eof(&self, len: usize) -> Result<()> {
-        let end = self.data.len();
+    fn parse_glyph_coordinate(
+        &mut self,
+        is_short_vector: bool,
+        repeat_or_sign_short_flag: bool,
+    ) -> Result<Option<GlyphCoordUnit>> {
+        let coord_or_repeat = match (is_short_vector, repeat_or_sign_short_flag) {
+            (true, signed) => {
+                let coord = if signed {
+                    self.read_i8()?
+                } else {
+                    self.read_u8()? as i8
+                };
 
-        ensure!(
-            self.cursor + len.saturating_sub(1) < self.data.len(),
-            "Unexpected EOF. At {}, seek by {}, buffer size: {}.",
-            self.cursor,
-            len,
-            end
-        );
+                Some(GlyphCoordUnit::I8(coord))
+            }
+            (false, is_repeat) => {
+                if is_repeat {
+                    None
+                } else {
+                    Some(GlyphCoordUnit::I16(self.read_i16()?))
+                }
+            }
+        };
 
-        Ok(())
+        Ok(coord_or_repeat)
     }
+
+    eof!();
 
     fn jump(&mut self, offset: usize, length: usize) -> Result<()> {
         ensure!(offset < self.data.len(), "Offset is out of bounds.");
@@ -265,12 +306,13 @@ impl<'a> TrueTypeFontParser<'a> {
         Ok(bs.try_into()?)
     }
 
-    read!(read_short_frac, ShortFrac, U16_BYTES);
+    // read!(read_short_frac, ShortFrac, U16_BYTES);
     read!(read_fixed, Fixed, U32_BYTES);
     read!(read_fword, FWord, U16_BYTES);
     read!(read_unsigned_fword, UnsignedFWord, U16_BYTES);
-    read!(read_f2dot14, F2Dot14, U16_BYTES);
+    // read!(read_f2dot14, F2Dot14, U16_BYTES);
     read!(read_long_date_time, LongDateTime, U64_BYTES);
+    read!(read_i8, i8, U8_BYTES);
     read!(read_u8, u8, U8_BYTES);
     read!(read_u16, u16, U16_BYTES);
     read!(read_u32, u32, U32_BYTES);

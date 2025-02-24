@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use comfy_table::{Attribute, Cell, Color, Table};
 use her::png::{grammar::Png, PngDecoder};
-use her::test_file_parser::{parse_test_file, PNGSuiteTestCase};
+use her::util::test_file_parser::{parse_test_file, PNGSuiteTestCase};
 use std::ffi::OsStr;
 use std::{fmt, fs, panic};
 
