@@ -190,6 +190,18 @@ pub struct MaxP {
 }
 
 #[derive(Debug)]
+pub struct LongHorizontalMetric {
+    pub advance_width: u16,
+    pub left_side_bearing: i16,
+}
+
+#[derive(Debug)]
+pub struct HMtx {
+    pub h_metrics: Vec<LongHorizontalMetric>,
+    pub left_side_bearing: Vec<FWord>,
+}
+
+#[derive(Debug)]
 pub struct Glyph {
     pub number_of_contours: i16,
     pub x_min: FWord,

@@ -306,7 +306,7 @@ mod tests {
         Ok(())
     }
 
-    // A note about the following test cases, these images were hand checked. This way, binary blobs can be generated with confidence (or hubris).
+    // A note about the following test cases, these images were hand checked. This way, binary blobs can be generated with confidence, not hubris.
 
     #[test]
     fn test_basic_grayscale_8bit() -> Result<()> {

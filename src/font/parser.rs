@@ -9,7 +9,7 @@ use crate::util::read_bytes::{U16_BYTES, U32_BYTES, U64_BYTES, U8_BYTES};
 use crate::{eof, read};
 use anyhow::{anyhow, ensure, Result};
 
-use super::grammar::MaxP;
+use super::grammar::{HMtx, LongHorizontalMetric, MaxP};
 
 #[derive(Debug)]
 pub struct TrueTypeFontParser<'a> {
@@ -40,7 +40,14 @@ impl<'a> TrueTypeFontParser<'a> {
         let maxp = {
             let maxp_table_record = font_directory.get_table_record(&TableTag::MaxP)?;
             self.jump_to_table_record(maxp_table_record)?;
-            self.parse_maxp()?;
+            self.parse_maxp()?
+        };
+
+        let hmtx = {
+            let hmtx_table_record = font_directory.get_table_record(&TableTag::HMtx)?;
+            self.jump_to_table_record(&hmtx_table_record)?;
+
+            self.parse_hmtx(hhea.num_of_long_hor_metrics, maxp.num_glyphs)?
         };
 
         dbg!(&head, &hhea, &maxp);
@@ -169,6 +176,34 @@ impl<'a> TrueTypeFontParser<'a> {
             max_size_of_instructions: self.read_u16()?,
             max_component_elements: self.read_u16()?,
             max_component_depth: self.read_u16()?,
+        })
+    }
+
+    fn parse_hmtx(&mut self, num_of_long_hor_metrics: u16, num_glyphs: u16) -> Result<HMtx> {
+        let mut h_metrics = Vec::with_capacity(num_of_long_hor_metrics as usize);
+
+        for _ in 0..num_of_long_hor_metrics {
+            h_metrics.push(self.parse_long_horizontal_metric()?);
+        }
+
+        let num_left_side_bearing = num_glyphs - num_of_long_hor_metrics;
+
+        let mut left_side_bearing = Vec::with_capacity(num_left_side_bearing as usize);
+
+        for _ in 0..num_left_side_bearing {
+            left_side_bearing.push(self.read_fword()?);
+        }
+
+        Ok(HMtx {
+            h_metrics,
+            left_side_bearing,
+        })
+    }
+
+    fn parse_long_horizontal_metric(&mut self) -> Result<LongHorizontalMetric> {
+        Ok(LongHorizontalMetric {
+            advance_width: self.read_u16()?,
+            left_side_bearing: self.read_i16()?,
         })
     }
 
