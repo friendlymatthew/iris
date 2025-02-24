@@ -6,7 +6,7 @@ pub struct MouseState {
 }
 
 impl MouseState {
-    pub(crate) fn pressed(&self) -> bool {
+    pub(crate) const fn pressed(&self) -> bool {
         self.pressed
     }
 
@@ -14,7 +14,7 @@ impl MouseState {
         self.pressed = state;
     }
 
-    pub(crate) fn position(&self) -> (f32, f32) {
+    pub(crate) const fn position(&self) -> (f32, f32) {
         (self.position_x, self.position_y)
     }
 

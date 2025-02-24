@@ -1,11 +1,15 @@
+use std::collections::BTreeMap;
+
 use crate::font::grammar::{
-    FWord, Fixed, FontDirectory, Glyph, GlyphCoordUnit, GlyphFlag, HHea, Head, LongDateTime,
-    OffsetSubTable, ScalarType, Table, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
+    FWord, Fixed, FontDirectory, Glyph, GlyphFlag, HHea, Head, LongDateTime, OffsetSubTable,
+    ScalarType, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
 };
 
 use crate::util::read_bytes::{U16_BYTES, U32_BYTES, U64_BYTES, U8_BYTES};
 use crate::{eof, read};
 use anyhow::{anyhow, ensure, Result};
+
+use super::grammar::MaxP;
 
 #[derive(Debug)]
 pub struct TrueTypeFontParser<'a> {
@@ -21,30 +25,25 @@ impl<'a> TrueTypeFontParser<'a> {
     pub fn parse(&mut self) -> Result<TrueTypeFontFile<'a>> {
         let font_directory = self.parse_font_directory()?;
 
-        for table_record in font_directory.table_directory.iter() {
-            if !table_record.table_tag.is_required() {
-                continue;
-            }
+        let head = {
+            let head_table_record = font_directory.get_table_record(&TableTag::Head)?;
+            self.jump_to_table_record(head_table_record)?;
+            self.parse_head()?
+        };
 
-            let (offset, length) = (table_record.offset as usize, table_record.length as usize);
-            self.jump(offset, length)?;
+        let hhea = {
+            let hhea_table_record = font_directory.get_table_record(&TableTag::HHea)?;
+            self.jump_to_table_record(hhea_table_record)?;
+            self.parse_hhea()?
+        };
 
-            if table_record.table_tag == TableTag::Head {
-                let head = self.parse_head()?;
+        let maxp = {
+            let maxp_table_record = font_directory.get_table_record(&TableTag::MaxP)?;
+            self.jump_to_table_record(maxp_table_record)?;
+            self.parse_maxp()?;
+        };
 
-                dbg!(head);
-            }
-
-            if table_record.table_tag == TableTag::HHea {
-                let hhea = self.parse_hhea()?;
-
-                dbg!(hhea);
-            }
-
-            if table_record.table_tag == TableTag::Glyf {
-                let _glyf = self.parse_glyph()?;
-            }
-        }
+        dbg!(&head, &hhea, &maxp);
 
         Ok(TrueTypeFontFile { font_directory })
     }
@@ -58,52 +57,31 @@ impl<'a> TrueTypeFontParser<'a> {
             range_shift: self.read_u16()?,
         };
 
-        let mut table_directory = Vec::new();
+        let mut table_directory = BTreeMap::new();
 
         for _ in 0..offset_sub_table.num_tables as usize {
             // todo: what does a checksum validation look like?
+            let table_tag = TableTag::try_from(self.read_slice::<U32_BYTES>()?)?;
 
-            table_directory.push(TableRecord {
-                table_tag: TableTag::try_from(self.read_slice::<U32_BYTES>()?)?,
-                _checksum: self.read_u32()?,
-                offset: self.read_u32()?,
-                length: self.read_u32()?,
-            });
+            ensure!(
+                !table_directory.contains_key(&table_tag),
+                "Todo: can certain table tags appear twice?"
+            );
+
+            table_directory.insert(
+                table_tag,
+                TableRecord {
+                    _checksum: self.read_u32()?,
+                    offset: self.read_u32()?,
+                    length: self.read_u32()?,
+                },
+            );
         }
 
         Ok(FontDirectory {
             offset_sub_table,
             table_directory,
         })
-    }
-
-    fn _parse_table(&mut self, table_record: &TableRecord) -> Result<Table> {
-        let &TableRecord {
-            offset,
-            length,
-            table_tag,
-            ..
-        } = table_record;
-
-        let (offset, length) = (offset as usize, length as usize);
-        self.jump(offset, length)?;
-
-        let table = match table_tag {
-            TableTag::CMap => todo!(),
-            TableTag::Glyf => Table::Glyf(self.parse_glyph()?),
-            TableTag::Head => Table::Head(self.parse_head()?),
-            TableTag::HHea => Table::HHea(self.parse_hhea()?),
-            TableTag::HMtx => todo!(),
-            TableTag::Loca => todo!(),
-            TableTag::MaxP => todo!(),
-            TableTag::Name => todo!(),
-            TableTag::Post => todo!(),
-            _ => todo!("How do optional tables parse?"),
-        };
-
-        dbg!(&table);
-
-        Ok(table)
     }
 
     fn parse_head(&mut self) -> Result<Head> {
@@ -172,7 +150,29 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_glyph(&mut self) -> Result<Glyph> {
+    fn parse_maxp(&mut self) -> Result<MaxP> {
+        // note: fonts with postscript outlines use a different table struct.
+        ensure!(self.read_fixed()? == 0x00010000, "Expected version 1.0");
+
+        Ok(MaxP {
+            num_glyphs: self.read_u16()?,
+            max_points: self.read_u16()?,
+            max_contours: self.read_u16()?,
+            max_component_points: self.read_u16()?,
+            max_component_contours: self.read_u16()?,
+            max_zones: self.read_u16()?,
+            max_twilight_points: self.read_u16()?,
+            max_storage: self.read_u16()?,
+            max_function_defs: self.read_u16()?,
+            max_instruction_defs: self.read_u16()?,
+            max_stack_elements: self.read_u16()?,
+            max_size_of_instructions: self.read_u16()?,
+            max_component_elements: self.read_u16()?,
+            max_component_depth: self.read_u16()?,
+        })
+    }
+
+    fn _parse_glyph(&mut self) -> Result<Glyph> {
         let mut glyph_table = Glyph {
             number_of_contours: self.read_i16()?,
             x_min: self.read_fword()?,
@@ -217,10 +217,10 @@ impl<'a> TrueTypeFontParser<'a> {
                 }
             }
 
-            let mut x_coordinates = vec![GlyphCoordUnit::I8(0)]; // since the first element is relative to (0, 0)
+            let mut x_coordinates = vec![0]; // since the first element is relative to (0, 0)
 
             for flag in &flags {
-                if let Some(glyph_coord) = self.parse_glyph_coordinate(
+                if let Some(glyph_coord) = self._parse_glyph_coordinate(
                     flag.x_short_vector(),
                     flag.repeat_or_sign_x_short_vector(),
                 )? {
@@ -228,18 +228,12 @@ impl<'a> TrueTypeFontParser<'a> {
                     continue;
                 }
 
-                ensure!(
-                    x_coordinates.len() > 0,
-                    "Need repeated glyph x coordinate but empty coordinates."
-                );
                 x_coordinates.push(*x_coordinates.last().unwrap());
             }
 
-            dbg!(&x_coordinates);
-
-            let mut y_coordinates = vec![GlyphCoordUnit::I8(0)]; // since first element is relative to (0, 0)
+            let mut y_coordinates = vec![0]; // since first element is relative to (0, 0)
             for flag in &flags {
-                if let Some(glyph_coord) = self.parse_glyph_coordinate(
+                if let Some(glyph_coord) = self._parse_glyph_coordinate(
                     flag.y_short_vector(),
                     flag.repeat_or_sign_y_short_vector(),
                 )? {
@@ -247,10 +241,6 @@ impl<'a> TrueTypeFontParser<'a> {
                     continue;
                 }
 
-                ensure!(
-                    y_coordinates.len() > 0,
-                    "Need repeated glyph y coordinate but empty coordinates."
-                );
                 y_coordinates.push(*y_coordinates.last().unwrap());
             }
 
@@ -261,26 +251,29 @@ impl<'a> TrueTypeFontParser<'a> {
         Ok(glyph_table)
     }
 
-    fn parse_glyph_coordinate(
+    fn _parse_glyph_coordinate(
         &mut self,
         is_short_vector: bool,
         repeat_or_sign_short_flag: bool,
-    ) -> Result<Option<GlyphCoordUnit>> {
+    ) -> Result<Option<i16>> {
         let coord_or_repeat = match (is_short_vector, repeat_or_sign_short_flag) {
             (true, signed) => {
                 let coord = if signed {
-                    self.read_i8()?
+                    let a = self.read_i8()? as i16;
+                    dbg!(a);
+
+                    -a
                 } else {
-                    self.read_u8()? as i8
+                    self.read_u8()? as i16
                 };
 
-                Some(GlyphCoordUnit::I8(coord))
+                Some(coord)
             }
             (false, is_repeat) => {
                 if is_repeat {
                     None
                 } else {
-                    Some(GlyphCoordUnit::I16(self.read_i16()?))
+                    Some(self.read_i16()?)
                 }
             }
         };
@@ -289,6 +282,11 @@ impl<'a> TrueTypeFontParser<'a> {
     }
 
     eof!();
+
+    fn jump_to_table_record(&mut self, table_record: &TableRecord) -> Result<()> {
+        let (offset, length) = (table_record.offset as usize, table_record.length as usize);
+        self.jump(offset, length)
+    }
 
     fn jump(&mut self, offset: usize, length: usize) -> Result<()> {
         ensure!(offset < self.data.len(), "Offset is out of bounds.");
@@ -328,7 +326,7 @@ mod tests {
     #[test]
     fn test_read_papyrus() -> Result<()> {
         let ttf_file = fs::read("./src/font/Papyrus.ttf")?;
-        let parser = TrueTypeFontParser::new(&ttf_file).parse()?;
+        let _parser = TrueTypeFontParser::new(&ttf_file).parse()?;
 
         Ok(())
     }

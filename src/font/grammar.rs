@@ -1,4 +1,6 @@
-use anyhow::{bail, Result};
+use std::collections::BTreeMap;
+
+use anyhow::{anyhow, bail, Result};
 
 pub type ShortFrac = i16;
 pub type Fixed = i32;
@@ -9,13 +11,21 @@ pub type LongDateTime = i64;
 
 #[derive(Debug)]
 pub struct TrueTypeFontFile<'a> {
-    pub(crate) font_directory: FontDirectory<'a>,
+    pub font_directory: FontDirectory<'a>,
 }
 
 #[derive(Debug)]
 pub struct FontDirectory<'a> {
-    pub(crate) offset_sub_table: OffsetSubTable,
-    pub(crate) table_directory: Vec<TableRecord<'a>>,
+    pub offset_sub_table: OffsetSubTable,
+    pub table_directory: BTreeMap<TableTag<'a>, TableRecord>,
+}
+
+impl<'a> FontDirectory<'a> {
+    pub fn get_table_record(&self, table_tag: &'a TableTag) -> Result<&TableRecord> {
+        self.table_directory
+            .get(table_tag)
+            .ok_or_else(|| anyhow!("Failed to find TableTag: {:?}", table_tag))
+    }
 }
 
 #[derive(Debug)]
@@ -42,11 +52,11 @@ impl TryFrom<&[u8; 4]> for ScalarType {
 
 #[derive(Debug)]
 pub struct OffsetSubTable {
-    pub(crate) scalar_type: ScalarType,
-    pub(crate) num_tables: u16,
-    pub(crate) search_range: u16,
-    pub(crate) entry_selector: u16,
-    pub(crate) range_shift: u16,
+    pub scalar_type: ScalarType,
+    pub num_tables: u16,
+    pub search_range: u16,
+    pub entry_selector: u16,
+    pub range_shift: u16,
 }
 
 #[derive(Debug, Copy, Clone, PartialOrd, Ord, PartialEq, Eq)]
@@ -118,78 +128,76 @@ impl<'a> TableTag<'a> {
 }
 
 #[derive(Debug)]
-pub struct TableRecord<'a> {
-    pub(crate) table_tag: TableTag<'a>,
-    pub(crate) _checksum: u32,
-    pub(crate) offset: u32,
-    pub(crate) length: u32,
-}
-
-#[derive(Debug)]
-pub enum Table {
-    CMap,
-    Glyf(Glyph),
-    Head(Head),
-    HHea(HHea),
-    HMtx,
-    Loca,
-    MaxP,
-    Name,
-    Post,
+pub struct TableRecord {
+    pub _checksum: u32,
+    pub offset: u32,
+    pub length: u32,
 }
 
 #[derive(Debug)]
 pub struct Head {
-    pub(crate) font_revision: Fixed,
-    pub(crate) checksum_adjustment: u32,
-    pub(crate) magic_number: u32,
-    pub(crate) flags: u16,
-    pub(crate) units_per_em: u16,
-    pub(crate) created: LongDateTime,
-    pub(crate) modified: LongDateTime,
-    pub(crate) x_min: FWord,
-    pub(crate) y_min: FWord,
-    pub(crate) x_max: FWord,
-    pub(crate) y_max: FWord,
-    pub(crate) mac_style: u16,
-    pub(crate) lowest_rec_ppem: u16,
-    pub(crate) font_direction_hint: i16,
-    pub(crate) index_to_loc_format: bool,
-    pub(crate) glyph_data_format: i16,
+    pub font_revision: Fixed,
+    pub checksum_adjustment: u32,
+    pub magic_number: u32,
+    pub flags: u16,
+    pub units_per_em: u16,
+    pub created: LongDateTime,
+    pub modified: LongDateTime,
+    pub x_min: FWord,
+    pub y_min: FWord,
+    pub x_max: FWord,
+    pub y_max: FWord,
+    pub mac_style: u16,
+    pub lowest_rec_ppem: u16,
+    pub font_direction_hint: i16,
+    pub index_to_loc_format: bool,
+    pub glyph_data_format: i16,
 }
 
 #[derive(Debug)]
 pub struct HHea {
-    pub(crate) ascent: FWord,
-    pub(crate) descent: FWord,
-    pub(crate) line_gap: FWord,
-    pub(crate) advance_width_max: UnsignedFWord,
-    pub(crate) min_left_side_bearing: FWord,
-    pub(crate) min_right_side_bearing: FWord,
-    pub(crate) x_max_extent: FWord,
-    pub(crate) caret_slope_rise: i16,
-    pub(crate) caret_slope_run: i16,
-    pub(crate) caret_offset: FWord,
-    pub(crate) _reserved: i64,
-    pub(crate) metric_data_format: i16,
-    pub(crate) num_of_long_hor_metrics: u16,
+    pub ascent: FWord,
+    pub descent: FWord,
+    pub line_gap: FWord,
+    pub advance_width_max: UnsignedFWord,
+    pub min_left_side_bearing: FWord,
+    pub min_right_side_bearing: FWord,
+    pub x_max_extent: FWord,
+    pub caret_slope_rise: i16,
+    pub caret_slope_run: i16,
+    pub caret_offset: FWord,
+    pub _reserved: i64,
+    pub metric_data_format: i16,
+    pub num_of_long_hor_metrics: u16,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum GlyphCoordUnit {
-    I8(i8),
-    I16(i16),
+#[derive(Debug)]
+pub struct MaxP {
+    pub num_glyphs: u16,
+    pub max_points: u16,
+    pub max_contours: u16,
+    pub max_component_points: u16,
+    pub max_component_contours: u16,
+    pub max_zones: u16,
+    pub max_twilight_points: u16,
+    pub max_storage: u16,
+    pub max_function_defs: u16,
+    pub max_instruction_defs: u16,
+    pub max_stack_elements: u16,
+    pub max_size_of_instructions: u16,
+    pub max_component_elements: u16,
+    pub max_component_depth: u16,
 }
 
 #[derive(Debug)]
 pub struct Glyph {
-    pub(crate) number_of_contours: i16,
-    pub(crate) x_min: FWord,
-    pub(crate) y_min: FWord,
-    pub(crate) x_max: FWord,
-    pub(crate) y_max: FWord,
-    pub(crate) flags: Vec<GlyphFlag>,
-    pub(crate) coordinates: Vec<(GlyphCoordUnit, GlyphCoordUnit)>,
+    pub number_of_contours: i16,
+    pub x_min: FWord,
+    pub y_min: FWord,
+    pub x_max: FWord,
+    pub y_max: FWord,
+    pub flags: Vec<GlyphFlag>,
+    pub coordinates: Vec<(i16, i16)>,
 }
 
 #[derive(Debug, Clone, Copy)]

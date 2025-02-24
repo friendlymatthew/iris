@@ -200,7 +200,7 @@ impl FeatureUniform {
 }
 
 impl FeatureUniform {
-    pub(crate) fn crosshair(&self) -> bool {
+    pub(crate) const fn crosshair(&self) -> bool {
         self.crosshair == 1
     }
 
@@ -218,7 +218,6 @@ impl FeatureUniform {
     }
 
     pub(crate) fn compute_drag_radius(&mut self, x: f32, y: f32) {
-        self.drag_radius =
-            ((self.drag_start_x - x).powi(2) + (self.drag_start_y - y).powi(2)).sqrt()
+        self.drag_radius = (self.drag_start_x - x).hypot(self.drag_start_y - y);
     }
 }
