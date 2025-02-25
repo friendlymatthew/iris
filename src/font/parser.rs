@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use super::grammar::{
-    FWord, Fixed, FontDirectory, Glyph, GlyphDescription, GlyphTable, HHeaTable, HMtxTable,
-    HeadTable, LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType,
-    SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
+    ComponentGlyph, ComponentGlyphArgument, ComponentGlyphFlag, ComponentGlyphTransformation,
+    F2Dot14, FWord, Fixed, FontDirectory, Glyph, GlyphDescription, GlyphTable, HHeaTable,
+    HMtxTable, HeadTable, LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable,
+    ScalarType, SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
 };
 
 use crate::util::read_bytes::{U16_BYTES, U32_BYTES, U64_BYTES, U8_BYTES};
@@ -303,7 +304,7 @@ impl<'a> TrueTypeFontParser<'a> {
             }
         }
 
-        let mut x_coordinates = vec![0]; // since the first element is relative to (0, 0)
+        let mut x_coordinates = vec![0]; // todo: what does relative to the previous point look like?
 
         for flag in &flags {
             if let Some(glyph_coord) = self.parse_glyph_coordinate(
@@ -317,7 +318,7 @@ impl<'a> TrueTypeFontParser<'a> {
             x_coordinates.push(*x_coordinates.last().unwrap());
         }
 
-        let mut y_coordinates = vec![0]; // since first element is relative to (0, 0)
+        let mut y_coordinates = vec![0]; // todo: what does relative to the previous point look like?
         for flag in &flags {
             if let Some(glyph_coord) = self.parse_glyph_coordinate(
                 flag.y_short_vector(),
@@ -358,6 +359,7 @@ impl<'a> TrueTypeFontParser<'a> {
                 if is_repeat {
                     None
                 } else {
+                    // todo: how do we store a delta coord?
                     Some(self.read_i16()?)
                 }
             }
@@ -367,7 +369,71 @@ impl<'a> TrueTypeFontParser<'a> {
     }
 
     fn parse_compound_glyph(&mut self) -> Result<Glyph> {
-        todo!()
+        let mut components = Vec::new();
+        let mut flag = ComponentGlyphFlag(self.read_u16()?);
+
+        loop {
+            let glyph_index = self.read_u16()?;
+
+            let (arg_1, arg_2) = {
+                match (flag.arg1_2_are_words(), flag.args_are_xy_values()) {
+                    (true, true) => (
+                        ComponentGlyphArgument::Coord(self.read_i16()?),
+                        ComponentGlyphArgument::Coord(self.read_i16()?),
+                    ),
+                    (false, true) => (
+                        ComponentGlyphArgument::Coord(self.read_i8()? as i16),
+                        ComponentGlyphArgument::Coord(self.read_i8()? as i16),
+                    ),
+                    (true, false) => (
+                        ComponentGlyphArgument::Point(self.read_u16()?),
+                        ComponentGlyphArgument::Point(self.read_u16()?),
+                    ),
+                    (false, false) => (
+                        ComponentGlyphArgument::Point(self.read_u8()? as u16),
+                        ComponentGlyphArgument::Point(self.read_u8()? as u16),
+                    ),
+                }
+            };
+
+            let transformation = {
+                if flag.we_have_a_scale() {
+                    ComponentGlyphTransformation::Uniform(self.read_f2dot14()?)
+                } else if flag.we_have_an_xy_scale() {
+                    ComponentGlyphTransformation::NonUniform {
+                        x_scale: self.read_f2dot14()?,
+                        y_scale: self.read_f2dot14()?,
+                    }
+                } else if flag.we_have_two_by_two() {
+                    ComponentGlyphTransformation::Affine {
+                        x_scale: self.read_f2dot14()?,
+                        scale_01: self.read_f2dot14()?,
+                        scale_10: self.read_f2dot14()?,
+                        y_scale: self.read_f2dot14()?,
+                    }
+                } else {
+                    ComponentGlyphTransformation::Uniform(1 << 14)
+                }
+            };
+
+            let component_glyph = ComponentGlyph {
+                flag,
+                glyph_index,
+                arg_1,
+                arg_2,
+                transformation,
+            };
+
+            components.push(component_glyph);
+
+            if !flag.more_components() {
+                break;
+            }
+
+            flag = ComponentGlyphFlag(self.read_u16()?);
+        }
+
+        Ok(Glyph::Compound { components })
     }
 
     eof!();
@@ -397,7 +463,7 @@ impl<'a> TrueTypeFontParser<'a> {
     read!(read_fixed, Fixed, U32_BYTES);
     read!(read_fword, FWord, U16_BYTES);
     read!(read_unsigned_fword, UnsignedFWord, U16_BYTES);
-    // read!(read_f2dot14, F2Dot14, U16_BYTES);
+    read!(read_f2dot14, F2Dot14, U16_BYTES);
     read!(read_long_date_time, LongDateTime, U64_BYTES);
     read!(read_i8, i8, U8_BYTES);
     read!(read_u8, u8, U8_BYTES);

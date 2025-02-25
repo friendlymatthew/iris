@@ -228,6 +228,9 @@ pub enum Glyph {
         flags: Vec<SimpleGlyphFlag>,
         coordinates: Vec<(i16, i16)>,
     },
+    Compound {
+        components: Vec<ComponentGlyph>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -257,4 +260,79 @@ impl SimpleGlyphFlag {
     pub const fn repeat_or_sign_y_short_vector(&self) -> bool {
         (self.0 & 0b100000) >> 5 == 1
     }
+}
+
+#[derive(Debug)]
+pub enum ComponentGlyphArgument {
+    Point(u16),
+    Coord(i16),
+}
+
+#[derive(Debug)]
+pub struct ComponentGlyph {
+    pub flag: ComponentGlyphFlag,
+    pub glyph_index: u16,
+    pub arg_1: ComponentGlyphArgument,
+    pub arg_2: ComponentGlyphArgument,
+    pub transformation: ComponentGlyphTransformation,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ComponentGlyphFlag(pub u16);
+
+impl ComponentGlyphFlag {
+    pub const fn arg1_2_are_words(&self) -> bool {
+        self.0 & 0b1 == 1
+    }
+
+    pub const fn args_are_xy_values(&self) -> bool {
+        self.0 & 0b10 << 1 == 1
+    }
+
+    pub const fn round_xy_to_grid(&self) -> bool {
+        self.0 & 0b100 << 2 == 1
+    }
+
+    pub const fn we_have_a_scale(&self) -> bool {
+        self.0 & 0b1000 << 3 == 1
+    }
+
+    pub const fn more_components(&self) -> bool {
+        self.0 & 0b100000 << 5 == 1
+    }
+
+    pub const fn we_have_an_xy_scale(&self) -> bool {
+        self.0 & 0b1000000 << 6 == 1
+    }
+
+    pub const fn we_have_two_by_two(&self) -> bool {
+        self.0 & 0b10000000 << 7 == 1
+    }
+
+    pub const fn we_have_instructions(&self) -> bool {
+        self.0 & 0b100000000 << 8 == 1
+    }
+
+    pub const fn use_my_metrics(&self) -> bool {
+        self.0 & 0b1000000000 << 9 == 1
+    }
+
+    pub const fn overlap_compound(&self) -> bool {
+        self.0 & 0b10000000000 << 10 == 1
+    }
+}
+
+#[derive(Debug)]
+pub enum ComponentGlyphTransformation {
+    Uniform(F2Dot14),
+    NonUniform {
+        x_scale: F2Dot14,
+        y_scale: F2Dot14,
+    },
+    Affine {
+        x_scale: F2Dot14,
+        scale_01: F2Dot14,
+        scale_10: F2Dot14,
+        y_scale: F2Dot14,
+    },
 }
