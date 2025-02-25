@@ -71,7 +71,12 @@ impl<'a> TrueTypeFontParser<'a> {
 
         let _glyph = {
             let glyph_table_record = font_directory.get_table_record(&TableTag::Glyf)?;
-            dbg!(glyph_table_record.offset, glyph_table_record.length);
+            dbg!(
+                glyph_table_record.offset,
+                glyph_table_record.length,
+                glyph_table_record.offset + glyph_table_record.length
+            );
+
             self.jump_to_table_record(&glyph_table_record)?;
 
             let offset = self.cursor;
@@ -249,10 +254,11 @@ impl<'a> TrueTypeFontParser<'a> {
             let glyph_description = self.parse_glyph_description()?;
 
             // https://github.com/khaledhosny/ots/issues/120
-            ensure!(
-                glyph_description.number_of_contours != 0,
-                "Todo: figure out what to do when you have 0 contours."
-            );
+            if glyph_description.number_of_contours == 0 {
+                let instruction_length = self.read_u16()?;
+                self.cursor += instruction_length as usize * U8_BYTES;
+                continue;
+            }
 
             let glyph = if glyph_description.is_simple() {
                 self.parse_simple_glyph(glyph_description.number_of_contours as usize)?
@@ -304,31 +310,32 @@ impl<'a> TrueTypeFontParser<'a> {
             }
         }
 
-        let mut x_coordinates = vec![0]; // todo: what does relative to the previous point look like?
+        let mut x_coordinates = vec![];
 
+        let mut prev_x = 0;
         for flag in &flags {
-            if let Some(glyph_coord) = self.parse_glyph_coordinate(
+            if let Some(delta_coord) = self.parse_glyph_coordinate(
                 flag.x_short_vector(),
                 flag.repeat_or_sign_x_short_vector(),
             )? {
-                x_coordinates.push(glyph_coord);
-                continue;
+                dbg!(prev_x, delta_coord);
+                prev_x += delta_coord;
             }
 
-            x_coordinates.push(*x_coordinates.last().unwrap());
+            x_coordinates.push(prev_x);
         }
 
-        let mut y_coordinates = vec![0]; // todo: what does relative to the previous point look like?
+        let mut y_coordinates = vec![];
+        let mut prev_y = 0;
         for flag in &flags {
-            if let Some(glyph_coord) = self.parse_glyph_coordinate(
+            if let Some(delta_coord) = self.parse_glyph_coordinate(
                 flag.y_short_vector(),
                 flag.repeat_or_sign_y_short_vector(),
             )? {
-                y_coordinates.push(glyph_coord);
-                continue;
+                prev_y += delta_coord;
             }
 
-            y_coordinates.push(*y_coordinates.last().unwrap());
+            y_coordinates.push(prev_y);
         }
 
         Ok(Glyph::Simple {
@@ -345,27 +352,14 @@ impl<'a> TrueTypeFontParser<'a> {
         is_short_vector: bool,
         repeat_or_sign_short_flag: bool,
     ) -> Result<Option<i16>> {
-        let coord_or_repeat = match (is_short_vector, repeat_or_sign_short_flag) {
-            (true, signed) => {
-                let coord = if signed {
-                    self.read_u8()? as i16
-                } else {
-                    -1 * self.read_i8()? as i16
-                };
-
-                Some(coord)
-            }
-            (false, is_repeat) => {
-                if is_repeat {
-                    None
-                } else {
-                    // todo: how do we store a delta coord?
-                    Some(self.read_i16()?)
-                }
-            }
+        let delta = match (is_short_vector, repeat_or_sign_short_flag) {
+            (true, true) => self.read_u8()? as i16,
+            (true, false) => -1 * self.read_u8()? as i16,
+            (false, true) => return Ok(None),
+            (false, false) => self.read_i16()?,
         };
 
-        Ok(coord_or_repeat)
+        Ok(Some(delta))
     }
 
     fn parse_compound_glyph(&mut self) -> Result<Glyph> {
@@ -375,25 +369,23 @@ impl<'a> TrueTypeFontParser<'a> {
         loop {
             let glyph_index = self.read_u16()?;
 
-            let (arg_1, arg_2) = {
-                match (flag.arg1_2_are_words(), flag.args_are_xy_values()) {
-                    (true, true) => (
-                        ComponentGlyphArgument::Coord(self.read_i16()?),
-                        ComponentGlyphArgument::Coord(self.read_i16()?),
-                    ),
-                    (false, true) => (
-                        ComponentGlyphArgument::Coord(self.read_i8()? as i16),
-                        ComponentGlyphArgument::Coord(self.read_i8()? as i16),
-                    ),
-                    (true, false) => (
-                        ComponentGlyphArgument::Point(self.read_u16()?),
-                        ComponentGlyphArgument::Point(self.read_u16()?),
-                    ),
-                    (false, false) => (
-                        ComponentGlyphArgument::Point(self.read_u8()? as u16),
-                        ComponentGlyphArgument::Point(self.read_u8()? as u16),
-                    ),
-                }
+            let (arg_1, arg_2) = match (flag.arg1_2_are_words(), flag.args_are_xy_values()) {
+                (true, true) => (
+                    ComponentGlyphArgument::Coord(self.read_i16()?),
+                    ComponentGlyphArgument::Coord(self.read_i16()?),
+                ),
+                (false, true) => (
+                    ComponentGlyphArgument::Coord(self.read_i8()? as i16),
+                    ComponentGlyphArgument::Coord(self.read_i8()? as i16),
+                ),
+                (true, false) => (
+                    ComponentGlyphArgument::Point(self.read_u16()?),
+                    ComponentGlyphArgument::Point(self.read_u16()?),
+                ),
+                (false, false) => (
+                    ComponentGlyphArgument::Point(self.read_u8()? as u16),
+                    ComponentGlyphArgument::Point(self.read_u8()? as u16),
+                ),
             };
 
             let transformation = {
@@ -479,8 +471,8 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn test_read_papyrus() -> Result<()> {
-        let ttf_file = fs::read("./src/font/NotoSansMono-Regular.ttf")?;
+    fn test_parse_noto_sans_mono() -> Result<()> {
+        let ttf_file = fs::read("./src/font/Papyrus.ttf")?;
         let _parser = TrueTypeFontParser::new(&ttf_file).parse()?;
 
         Ok(())
