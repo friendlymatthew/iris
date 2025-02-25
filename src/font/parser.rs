@@ -1,15 +1,14 @@
 use std::collections::BTreeMap;
 
-use crate::font::grammar::{
-    FWord, Fixed, FontDirectory, Glyph, GlyphFlag, HHea, Head, LongDateTime, OffsetSubTable,
-    ScalarType, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
+use super::grammar::{
+    FWord, Fixed, FontDirectory, Glyph, GlyphDescription, GlyphTable, HHeaTable, HMtxTable,
+    HeadTable, LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType,
+    SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
 };
 
 use crate::util::read_bytes::{U16_BYTES, U32_BYTES, U64_BYTES, U8_BYTES};
 use crate::{eof, read};
-use anyhow::{anyhow, ensure, Result};
-
-use super::grammar::{HMtx, LongHorizontalMetric, MaxP};
+use anyhow::{ensure, Result};
 
 #[derive(Debug)]
 pub struct TrueTypeFontParser<'a> {
@@ -28,29 +27,60 @@ impl<'a> TrueTypeFontParser<'a> {
         let head = {
             let head_table_record = font_directory.get_table_record(&TableTag::Head)?;
             self.jump_to_table_record(head_table_record)?;
-            self.parse_head()?
+
+            let offset = self.cursor;
+            let head = self.parse_head_table()?;
+            debug_assert_eq!(self.cursor - offset, head_table_record.length as usize);
+
+            head
         };
 
         let hhea = {
             let hhea_table_record = font_directory.get_table_record(&TableTag::HHea)?;
             self.jump_to_table_record(hhea_table_record)?;
-            self.parse_hhea()?
+
+            let offset = self.cursor;
+            let hhea = self.parse_hhea_table()?;
+            debug_assert_eq!(self.cursor - offset, hhea_table_record.length as usize);
+
+            hhea
         };
 
         let maxp = {
             let maxp_table_record = font_directory.get_table_record(&TableTag::MaxP)?;
             self.jump_to_table_record(maxp_table_record)?;
-            self.parse_maxp()?
+
+            let offset = self.cursor;
+            let maxp = self.parse_maxp_table()?;
+            debug_assert_eq!(self.cursor - offset, maxp_table_record.length as usize);
+
+            maxp
         };
 
         let hmtx = {
             let hmtx_table_record = font_directory.get_table_record(&TableTag::HMtx)?;
             self.jump_to_table_record(&hmtx_table_record)?;
 
-            self.parse_hmtx(hhea.num_of_long_hor_metrics, maxp.num_glyphs)?
+            let offset = self.cursor;
+            let htmx = self.parse_hmtx_table(hhea.num_of_long_hor_metrics, maxp.num_glyphs)?;
+            debug_assert_eq!(self.cursor - offset, hmtx_table_record.length as usize);
+
+            htmx
         };
 
-        dbg!(&head, &hhea, &maxp);
+        let _glyph = {
+            let glyph_table_record = font_directory.get_table_record(&TableTag::Glyf)?;
+            dbg!(glyph_table_record.offset, glyph_table_record.length);
+            self.jump_to_table_record(&glyph_table_record)?;
+
+            let offset = self.cursor;
+            let glyph = self.parse_glyph_table(maxp.num_glyphs)?;
+            debug_assert_eq!(self.cursor - offset, glyph_table_record.length as usize);
+
+            glyph
+        };
+
+        dbg!(&head, &hhea, &maxp, &hmtx);
 
         Ok(TrueTypeFontFile { font_directory })
     }
@@ -91,13 +121,13 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_head(&mut self) -> Result<Head> {
+    fn parse_head_table(&mut self) -> Result<HeadTable> {
         ensure!(
             self.read_fixed()? == 0x00010000,
             "Expected fixed version (1.0)."
         );
 
-        Ok(Head {
+        Ok(HeadTable {
             font_revision: self.read_fixed()?,
             checksum_adjustment: self.read_u32()?,
             magic_number: {
@@ -134,13 +164,13 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_hhea(&mut self) -> Result<HHea> {
+    fn parse_hhea_table(&mut self) -> Result<HHeaTable> {
         ensure!(
             self.read_fixed()? == 0x00010000,
             "Expected fixed version (1.0)."
         );
 
-        Ok(HHea {
+        Ok(HHeaTable {
             ascent: self.read_fword()?,
             descent: self.read_fword()?,
             line_gap: self.read_fword()?,
@@ -157,11 +187,11 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_maxp(&mut self) -> Result<MaxP> {
+    fn parse_maxp_table(&mut self) -> Result<MaxPTable> {
         // note: fonts with postscript outlines use a different table struct.
         ensure!(self.read_fixed()? == 0x00010000, "Expected version 1.0");
 
-        Ok(MaxP {
+        Ok(MaxPTable {
             num_glyphs: self.read_u16()?,
             max_points: self.read_u16()?,
             max_contours: self.read_u16()?,
@@ -179,7 +209,11 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_hmtx(&mut self, num_of_long_hor_metrics: u16, num_glyphs: u16) -> Result<HMtx> {
+    fn parse_hmtx_table(
+        &mut self,
+        num_of_long_hor_metrics: u16,
+        num_glyphs: u16,
+    ) -> Result<HMtxTable> {
         let mut h_metrics = Vec::with_capacity(num_of_long_hor_metrics as usize);
 
         for _ in 0..num_of_long_hor_metrics {
@@ -194,7 +228,7 @@ impl<'a> TrueTypeFontParser<'a> {
             left_side_bearing.push(self.read_fword()?);
         }
 
-        Ok(HMtx {
+        Ok(HMtxTable {
             h_metrics,
             left_side_bearing,
         })
@@ -207,86 +241,105 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn _parse_glyph(&mut self) -> Result<Glyph> {
-        let mut glyph_table = Glyph {
+    fn parse_glyph_table(&mut self, num_glyphs: u16) -> Result<GlyphTable> {
+        let mut glyphs = Vec::with_capacity(num_glyphs as usize);
+
+        for _ in 0..num_glyphs {
+            let glyph_description = self.parse_glyph_description()?;
+
+            // https://github.com/khaledhosny/ots/issues/120
+            ensure!(
+                glyph_description.number_of_contours != 0,
+                "Todo: figure out what to do when you have 0 contours."
+            );
+
+            let glyph = if glyph_description.is_simple() {
+                self.parse_simple_glyph(glyph_description.number_of_contours as usize)?
+            } else {
+                self.parse_compound_glyph()?
+            };
+
+            glyphs.push((glyph_description, glyph));
+        }
+
+        Ok(GlyphTable(glyphs))
+    }
+
+    fn parse_glyph_description(&mut self) -> Result<GlyphDescription> {
+        Ok(GlyphDescription {
             number_of_contours: self.read_i16()?,
             x_min: self.read_fword()?,
             y_min: self.read_fword()?,
             x_max: self.read_fword()?,
             y_max: self.read_fword()?,
-            flags: vec![],
-            coordinates: vec![],
-        };
-
-        if glyph_table.number_of_contours < 0 {
-            todo!("How does a compound glyph parse?")
-        } else {
-            let number_of_contours = glyph_table.number_of_contours as usize;
-            let mut end_points_of_contours = Vec::with_capacity(number_of_contours);
-            for _ in 0..number_of_contours {
-                end_points_of_contours.push(self.read_u16()?);
-            }
-
-            let instruction_length = self.read_u16()? as usize;
-            let mut instructions = Vec::with_capacity(instruction_length);
-            for _ in 0..instruction_length {
-                instructions.push(self.read_u8()?);
-            }
-
-            let number_of_points = *end_points_of_contours
-                .last()
-                .ok_or_else(|| anyhow!("Expect at least one point of contour."))?
-                as usize
-                + 1;
-
-            let mut flags = Vec::new();
-
-            while flags.len() < number_of_points {
-                let flag = GlyphFlag(self.read_u8()?);
-                flags.push(flag);
-
-                if flag.should_repeat() {
-                    for _ in 0..self.read_u8()? {
-                        flags.push(flag);
-                    }
-                }
-            }
-
-            let mut x_coordinates = vec![0]; // since the first element is relative to (0, 0)
-
-            for flag in &flags {
-                if let Some(glyph_coord) = self._parse_glyph_coordinate(
-                    flag.x_short_vector(),
-                    flag.repeat_or_sign_x_short_vector(),
-                )? {
-                    x_coordinates.push(glyph_coord);
-                    continue;
-                }
-
-                x_coordinates.push(*x_coordinates.last().unwrap());
-            }
-
-            let mut y_coordinates = vec![0]; // since first element is relative to (0, 0)
-            for flag in &flags {
-                if let Some(glyph_coord) = self._parse_glyph_coordinate(
-                    flag.y_short_vector(),
-                    flag.repeat_or_sign_y_short_vector(),
-                )? {
-                    y_coordinates.push(glyph_coord);
-                    continue;
-                }
-
-                y_coordinates.push(*y_coordinates.last().unwrap());
-            }
-
-            glyph_table.flags = flags;
-            glyph_table.coordinates = x_coordinates.into_iter().zip(y_coordinates).collect();
-        }
-
-        Ok(glyph_table)
+        })
     }
 
-    fn _parse_glyph_coordinate(
+    fn parse_simple_glyph(&mut self, number_of_contours: usize) -> Result<Glyph> {
+        let mut end_points_of_contours = Vec::with_capacity(number_of_contours);
+
+        for _ in 0..number_of_contours {
+            end_points_of_contours.push(self.read_u16()?);
+        }
+
+        let instruction_length = self.read_u16()?;
+        let mut instructions = Vec::with_capacity(instruction_length as usize);
+        for _ in 0..instruction_length {
+            instructions.push(self.read_u8()?);
+        }
+
+        let number_of_points = *end_points_of_contours.last().unwrap() as usize + 1;
+
+        let mut flags = Vec::new();
+
+        while flags.len() < number_of_points {
+            let flag = SimpleGlyphFlag(self.read_u8()?);
+            flags.push(flag);
+
+            if flag.should_repeat() {
+                for _ in 0..self.read_u8()? {
+                    flags.push(flag);
+                }
+            }
+        }
+
+        let mut x_coordinates = vec![0]; // since the first element is relative to (0, 0)
+
+        for flag in &flags {
+            if let Some(glyph_coord) = self.parse_glyph_coordinate(
+                flag.x_short_vector(),
+                flag.repeat_or_sign_x_short_vector(),
+            )? {
+                x_coordinates.push(glyph_coord);
+                continue;
+            }
+
+            x_coordinates.push(*x_coordinates.last().unwrap());
+        }
+
+        let mut y_coordinates = vec![0]; // since first element is relative to (0, 0)
+        for flag in &flags {
+            if let Some(glyph_coord) = self.parse_glyph_coordinate(
+                flag.y_short_vector(),
+                flag.repeat_or_sign_y_short_vector(),
+            )? {
+                y_coordinates.push(glyph_coord);
+                continue;
+            }
+
+            y_coordinates.push(*y_coordinates.last().unwrap());
+        }
+
+        Ok(Glyph::Simple {
+            end_points_of_contours,
+            instruction_length,
+            instructions,
+            flags,
+            coordinates: x_coordinates.into_iter().zip(y_coordinates).collect(),
+        })
+    }
+
+    fn parse_glyph_coordinate(
         &mut self,
         is_short_vector: bool,
         repeat_or_sign_short_flag: bool,
@@ -294,12 +347,9 @@ impl<'a> TrueTypeFontParser<'a> {
         let coord_or_repeat = match (is_short_vector, repeat_or_sign_short_flag) {
             (true, signed) => {
                 let coord = if signed {
-                    let a = self.read_i8()? as i16;
-                    dbg!(a);
-
-                    -a
-                } else {
                     self.read_u8()? as i16
+                } else {
+                    -1 * self.read_i8()? as i16
                 };
 
                 Some(coord)
@@ -314,6 +364,10 @@ impl<'a> TrueTypeFontParser<'a> {
         };
 
         Ok(coord_or_repeat)
+    }
+
+    fn parse_compound_glyph(&mut self) -> Result<Glyph> {
+        todo!()
     }
 
     eof!();
@@ -360,7 +414,7 @@ mod tests {
 
     #[test]
     fn test_read_papyrus() -> Result<()> {
-        let ttf_file = fs::read("./src/font/Papyrus.ttf")?;
+        let ttf_file = fs::read("./src/font/NotoSansMono-Regular.ttf")?;
         let _parser = TrueTypeFontParser::new(&ttf_file).parse()?;
 
         Ok(())

@@ -135,7 +135,7 @@ pub struct TableRecord {
 }
 
 #[derive(Debug)]
-pub struct Head {
+pub struct HeadTable {
     pub font_revision: Fixed,
     pub checksum_adjustment: u32,
     pub magic_number: u32,
@@ -155,7 +155,7 @@ pub struct Head {
 }
 
 #[derive(Debug)]
-pub struct HHea {
+pub struct HHeaTable {
     pub ascent: FWord,
     pub descent: FWord,
     pub line_gap: FWord,
@@ -172,7 +172,7 @@ pub struct HHea {
 }
 
 #[derive(Debug)]
-pub struct MaxP {
+pub struct MaxPTable {
     pub num_glyphs: u16,
     pub max_points: u16,
     pub max_contours: u16,
@@ -196,26 +196,44 @@ pub struct LongHorizontalMetric {
 }
 
 #[derive(Debug)]
-pub struct HMtx {
+pub struct HMtxTable {
     pub h_metrics: Vec<LongHorizontalMetric>,
     pub left_side_bearing: Vec<FWord>,
 }
 
 #[derive(Debug)]
-pub struct Glyph {
+pub struct GlyphTable(pub Vec<(GlyphDescription, Glyph)>);
+
+#[derive(Debug)]
+pub struct GlyphDescription {
     pub number_of_contours: i16,
     pub x_min: FWord,
     pub y_min: FWord,
     pub x_max: FWord,
     pub y_max: FWord,
-    pub flags: Vec<GlyphFlag>,
-    pub coordinates: Vec<(i16, i16)>,
+}
+
+impl GlyphDescription {
+    pub(crate) fn is_simple(&self) -> bool {
+        self.number_of_contours >= 0
+    }
+}
+
+#[derive(Debug)]
+pub enum Glyph {
+    Simple {
+        end_points_of_contours: Vec<u16>,
+        instruction_length: u16,
+        instructions: Vec<u8>,
+        flags: Vec<SimpleGlyphFlag>,
+        coordinates: Vec<(i16, i16)>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct GlyphFlag(pub u8);
+pub struct SimpleGlyphFlag(pub u8);
 
-impl GlyphFlag {
+impl SimpleGlyphFlag {
     pub const fn on_curve(&self) -> bool {
         self.0 & 0b1 == 1
     }
