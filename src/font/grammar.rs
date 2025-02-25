@@ -253,11 +253,11 @@ impl SimpleGlyphFlag {
         (self.0 & 0b1000) >> 3 == 1
     }
 
-    pub const fn repeat_or_sign_x_short_vector(&self) -> bool {
+    pub const fn x_is_same_or_sign(&self) -> bool {
         (self.0 & 0b10000) >> 4 == 1
     }
 
-    pub const fn repeat_or_sign_y_short_vector(&self) -> bool {
+    pub const fn y_is_same_or_sign(&self) -> bool {
         (self.0 & 0b100000) >> 5 == 1
     }
 }

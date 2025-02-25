@@ -314,11 +314,9 @@ impl<'a> TrueTypeFontParser<'a> {
 
         let mut prev_x = 0;
         for flag in &flags {
-            if let Some(delta_coord) = self.parse_glyph_coordinate(
-                flag.x_short_vector(),
-                flag.repeat_or_sign_x_short_vector(),
-            )? {
-                dbg!(prev_x, delta_coord);
+            if let Some(delta_coord) =
+                self.parse_glyph_coordinate(flag.x_short_vector(), flag.x_is_same_or_sign())?
+            {
                 prev_x += delta_coord;
             }
 
@@ -328,10 +326,9 @@ impl<'a> TrueTypeFontParser<'a> {
         let mut y_coordinates = vec![];
         let mut prev_y = 0;
         for flag in &flags {
-            if let Some(delta_coord) = self.parse_glyph_coordinate(
-                flag.y_short_vector(),
-                flag.repeat_or_sign_y_short_vector(),
-            )? {
+            if let Some(delta_coord) =
+                self.parse_glyph_coordinate(flag.y_short_vector(), flag.y_is_same_or_sign())?
+            {
                 prev_y += delta_coord;
             }
 
@@ -350,9 +347,9 @@ impl<'a> TrueTypeFontParser<'a> {
     fn parse_glyph_coordinate(
         &mut self,
         is_short_vector: bool,
-        repeat_or_sign_short_flag: bool,
+        same_or_sign: bool,
     ) -> Result<Option<i16>> {
-        let delta = match (is_short_vector, repeat_or_sign_short_flag) {
+        let delta = match (is_short_vector, same_or_sign) {
             (true, true) => self.read_u8()? as i16,
             (true, false) => -1 * self.read_u8()? as i16,
             (false, true) => return Ok(None),
