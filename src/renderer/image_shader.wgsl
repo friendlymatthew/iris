@@ -12,15 +12,23 @@ struct FeatureUniform {
     sharpen_factor: u32,
     edge_detect: u32,
     transform: mat4x4<f32>,
+};
+
+struct DrawUniform {
+    crosshair: u32,
     drag: u32,
     drag_start_x: f32,
     drag_start_y: f32,
     drag_radius: f32,
-};
+}
 
 
 @group(1) @binding(0)
 var<uniform> feature_uniform: FeatureUniform;
+
+
+@group(2) @binding(0)
+var<uniform> draw_uniform: DrawUniform;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -183,14 +191,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         );
     }
 
-    if feature_uniform.drag == 1u {
-        var pixel_coords = in.tex_coords * vec2(f32(feature_uniform.width), f32(feature_uniform.height));
-        var mouse_pixel = vec2(feature_uniform.drag_start_x, feature_uniform.drag_start_y);
+    if draw_uniform.crosshair == 1u {
+        if draw_uniform.drag == 1u {
+            var pixel_coords = in.tex_coords * vec2(f32(feature_uniform.width), f32(feature_uniform.height));
+            var mouse_pixel = vec2(draw_uniform.drag_start_x, draw_uniform.drag_start_y);
 
-        if distance(pixel_coords, mouse_pixel) < feature_uniform.drag_radius {
-            pixels.r = 0.0;
-            pixels.g = 1.0;
-            pixels.b = 1.0;
+            if distance(pixel_coords, mouse_pixel) < draw_uniform.drag_radius {
+                pixels.r = 0.0;
+                pixels.g = 1.0;
+                pixels.b = 1.0;
+            }
         }
     }
 

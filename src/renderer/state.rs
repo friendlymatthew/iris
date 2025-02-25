@@ -28,6 +28,8 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+use super::draw_uniform::DrawUniform;
+
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-1.0, -1.0, 0.0],
@@ -70,6 +72,10 @@ struct State<'a> {
     feature_uniform: FeatureUniform,
     feature_buffer: Buffer,
     feature_bind_group: BindGroup,
+
+    draw_uniform: DrawUniform,
+    draw_buffer: Buffer,
+    draw_bind_group: BindGroup,
 
     mouse_state: MouseState,
 }
@@ -182,7 +188,7 @@ impl<'a> State<'a> {
         let feature_uniform = FeatureUniform::new(config.width, config.height, png.gamma);
 
         let feature_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Color Tone Buffer"),
+            label: Some("Feature Buffer"),
             contents: bytemuck::cast_slice(&[feature_uniform]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
@@ -211,6 +217,37 @@ impl<'a> State<'a> {
             label: Some("feature_bind_group"),
         });
 
+        let draw_uniform = DrawUniform::new();
+
+        let draw_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Draw Buffer"),
+            contents: bytemuck::cast_slice(&[draw_uniform]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
+        let draw_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX_FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("draw_bind_group_layout"),
+        });
+
+        let draw_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            layout: &draw_bind_group_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: draw_buffer.as_entire_binding(),
+            }],
+            label: Some("draw_bind_group"),
+        });
+
         let image_shader = device.create_shader_module(ShaderModuleDescriptor {
             label: Some("Shader"),
             source: ShaderSource::Wgsl(include_str!("image_shader.wgsl").into()),
@@ -219,7 +256,11 @@ impl<'a> State<'a> {
         let image_render_pipeline_layout =
             device.create_pipeline_layout(&PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&texture_bind_group_layout, &feature_bind_group_layout],
+                bind_group_layouts: &[
+                    &texture_bind_group_layout,
+                    &feature_bind_group_layout,
+                    &draw_bind_group_layout,
+                ],
                 push_constant_ranges: &[],
             });
 
@@ -301,6 +342,9 @@ impl<'a> State<'a> {
             feature_uniform,
             feature_buffer,
             feature_bind_group,
+            draw_uniform,
+            draw_buffer,
+            draw_bind_group,
             mouse_state,
         })
     }
@@ -332,6 +376,7 @@ impl<'a> State<'a> {
 
     fn input(&mut self, event: &WindowEvent) -> bool {
         let feature_uniform = &mut self.feature_uniform;
+        let draw_uniform = &mut self.draw_uniform;
 
         match event {
             WindowEvent::MouseInput { state, button, .. } => {
@@ -341,20 +386,19 @@ impl<'a> State<'a> {
                     self.mouse_state
                         .set_pressed(matches!(state, ElementState::Pressed));
 
-                    if !feature_uniform.crosshair() {
+                    if !draw_uniform.crosshair() {
                         return true;
                     }
 
                     match (prev_state, self.mouse_state.pressed()) {
                         (false, true) => {
-                            self.window.set_cursor_icon(CursorIcon::Crosshair);
-                            feature_uniform.set_drag(true);
+                            draw_uniform.set_drag(true);
 
                             let (start_x, start_y) = self.mouse_state.position();
-                            feature_uniform.set_start_drag_position(start_x, start_y);
+                            draw_uniform.set_start_drag_position(start_x, start_y);
                         }
                         (true, false) => {
-                            feature_uniform.set_drag(false);
+                            draw_uniform.set_drag(false);
                         }
                         _ => {}
                     }
@@ -366,7 +410,7 @@ impl<'a> State<'a> {
                 self.mouse_state.update_position(x, y);
 
                 if self.mouse_state.pressed() {
-                    feature_uniform.compute_drag_radius(x, y);
+                    draw_uniform.compute_drag_radius(x, y);
                 }
             }
             WindowEvent::KeyboardInput {
@@ -379,9 +423,9 @@ impl<'a> State<'a> {
                 ..
             } => match (keycode, state) {
                 (KeyCode::KeyA, ElementState::Pressed) => {
-                    feature_uniform.toggle_crosshair();
+                    draw_uniform.toggle_crosshair();
 
-                    if feature_uniform.crosshair() {
+                    if draw_uniform.crosshair() {
                         self.window.set_cursor_icon(CursorIcon::Crosshair);
                     } else {
                         self.window.set_cursor_icon(CursorIcon::Default);
@@ -443,6 +487,12 @@ impl<'a> State<'a> {
             0,
             bytemuck::cast_slice(&[self.feature_uniform]),
         );
+
+        self.queue.write_buffer(
+            &self.draw_buffer,
+            0,
+            bytemuck::cast_slice(&[self.draw_uniform]),
+        );
     }
 
     fn render(&self) -> Result<(), SurfaceError> {
@@ -481,6 +531,7 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.image_render_pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.feature_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.draw_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
