@@ -69,7 +69,7 @@ impl<'a> TrueTypeFontParser<'a> {
             htmx
         };
 
-        let _glyph = {
+        let glyph = {
             let glyph_table_record = font_directory.get_table_record(&TableTag::Glyf)?;
             dbg!(
                 glyph_table_record.offset,
@@ -86,7 +86,7 @@ impl<'a> TrueTypeFontParser<'a> {
             glyph
         };
 
-        dbg!(&head, &hhea, &maxp, &hmtx);
+        dbg!(&head, &hhea, &maxp, &hmtx, &glyph);
 
         Ok(TrueTypeFontFile { font_directory })
     }
@@ -468,8 +468,8 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn test_parse_noto_sans_mono() -> Result<()> {
-        let ttf_file = fs::read("./src/font/Papyrus.ttf")?;
+    fn test_parse_lato() -> Result<()> {
+        let ttf_file = fs::read("./src/font/Lato-Regular.ttf")?;
         let _parser = TrueTypeFontParser::new(&ttf_file).parse()?;
 
         Ok(())

@@ -135,6 +135,172 @@ pub struct TableRecord {
 }
 
 #[derive(Debug)]
+pub struct CMapTable(pub Vec<CMapSubTable>);
+
+#[derive(Debug)]
+pub struct CMapSubTable {
+    pub platform_id: Platform,
+    pub platform_specific_id: u16,
+    pub offset: u32,
+}
+
+#[derive(Debug)]
+pub enum CMapFormat {
+    Zero(CMapFormat0),
+    Two(CMapFormat2),
+    Four(CMapFormat4),
+    Six(CMapFormat6),
+    Eight(CMapFormat8),
+    Ten(CMapFormat10),
+    Twelve(CMapFormat12),
+    Fourteen(CMapFormat14),
+}
+
+#[derive(Debug)]
+pub struct CMapFormat0 {
+    pub length: u16,
+    pub language: u16,
+    pub glyph_index_array: [u8; 256],
+}
+
+#[derive(Debug)]
+pub struct CMapFormat2 {
+    pub length: u16,
+    pub language: u16,
+    pub subheader_keys: [u16; 256],
+    pub subheaders: Vec<CMapSubHeader>,
+    pub glyph_index_array: Vec<u16>,
+}
+
+#[derive(Debug)]
+pub struct CMapSubHeader {
+    pub first_code: u16,
+    pub entry_count: u16,
+    pub id_delta: i16,
+    pub id_range_offset: u16,
+}
+
+#[derive(Debug)]
+pub struct CMapFormat4 {
+    pub length: u16,
+    pub language: u16,
+    pub seg_count_x2: u16,
+    pub search_range: u16,
+    pub entry_selector: u16,
+    pub range_shift: u16,
+    pub end_codes: Vec<u16>,
+    // pub reserved_pad: u16,
+    pub start_codes: Vec<u16>,
+    pub id_deltas: Vec<u16>,
+    pub id_range_offset: Vec<u16>,
+    pub glyph_index_array: Vec<u16>,
+}
+
+#[derive(Debug)]
+pub struct CMapFormat6 {
+    pub length: u16,
+    pub language: u16,
+    pub first_code: u16,
+    pub entry_count: u16,
+    pub glyph_index_array: Vec<u16>,
+}
+
+#[derive(Debug)]
+pub struct CMapFormat8 {
+    // pub reserved: u16,
+    pub length: u32,
+    pub language: u32,
+    pub is_32: [u8; 65536],
+    pub groups: Vec<CMapIndividualGroup>,
+}
+
+#[derive(Debug)]
+pub struct CMapIndividualGroup {
+    pub start_char_code: u32,
+    pub end_char_code: u32,
+    pub start_glyph_code: u32,
+}
+
+#[derive(Debug)]
+pub struct CMapFormat10 {
+    // pub format: u16,
+    // pub reserved: u16,
+    pub length: u32,
+    pub language: u32,
+    pub start_char_code: u32,
+    pub num_chars: u32,
+    pub glyphs: Vec<u16>,
+}
+
+#[derive(Debug)]
+pub struct CMapFormat12 {
+    // pub format: u16,
+    // pub reserved: u16,
+    pub length: u32,
+    pub language: u32,
+    pub groups: Vec<CMapIndividualGroup>,
+}
+
+#[derive(Debug)]
+pub struct CMapFormat14 {
+    // pub format: u16,
+    pub length: u32,
+    pub records: Vec<VariationSelectorRecord>,
+}
+
+#[derive(Debug)]
+pub struct VariationSelectorRecord {
+    pub variation_selector: u32, // actually a u24
+    pub default_uvs_offset: u32,
+    pub non_default_uvs_offset: u32,
+}
+
+#[derive(Debug)]
+pub struct DefaultUVSTable {
+    pub unicode_value_ranges: Vec<UnicodeValueRange>,
+}
+
+#[derive(Debug)]
+pub struct UnicodeValueRange {
+    pub start_unicode_value: u32, // note this is a u24
+    pub additional_count: u8,
+}
+
+#[derive(Debug)]
+pub struct NonDefaultUVSTable {
+    pub uvs_mappings: Vec<UnicodeValueMap>,
+}
+
+#[derive(Debug)]
+pub struct UnicodeValueMap {
+    pub unicode_value: u32, // note this is a u24
+    pub glyph_id: u16,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum Platform {
+    Unicode,
+    Macintosh,
+    Microsoft,
+}
+
+impl TryFrom<u16> for Platform {
+    type Error = anyhow::Error;
+
+    fn try_from(value: u16) -> std::result::Result<Self, Self::Error> {
+        let platform_id = match value {
+            0 => Self::Unicode,
+            1 => Self::Macintosh,
+            2 => bail!("Reserved platform id. Do not use."),
+            3 => Self::Microsoft,
+            foreign => bail!("Foreign platform id: {}.", foreign),
+        };
+
+        Ok(platform_id)
+    }
+}
+
+#[derive(Debug)]
 pub struct HeadTable {
     pub font_revision: Fixed,
     pub checksum_adjustment: u32,
