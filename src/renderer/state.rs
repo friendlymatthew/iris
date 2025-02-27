@@ -29,6 +29,7 @@ use winit::{
 };
 
 use super::draw_uniform::DrawUniform;
+use super::shape::{compute_radius, Shape, ShapeStack};
 
 const VERTICES: &[Vertex] = &[
     Vertex {
@@ -78,6 +79,8 @@ struct State<'a> {
     draw_bind_group: BindGroup,
 
     mouse_state: MouseState,
+
+    shape_stack: ShapeStack,
 }
 
 impl<'a> State<'a> {
@@ -325,6 +328,7 @@ impl<'a> State<'a> {
         let num_indices = INDICES.len() as u32;
 
         let mouse_state = MouseState::default();
+        let shape_stack = ShapeStack::new();
 
         Ok(Self {
             surface,
@@ -346,6 +350,7 @@ impl<'a> State<'a> {
             draw_buffer,
             draw_bind_group,
             mouse_state,
+            shape_stack,
         })
     }
 
@@ -392,13 +397,28 @@ impl<'a> State<'a> {
 
                     match (prev_state, self.mouse_state.pressed()) {
                         (false, true) => {
-                            draw_uniform.set_drag(true);
-
                             let (start_x, start_y) = self.mouse_state.position();
-                            draw_uniform.set_start_drag_position(start_x, start_y);
+
+                            dbg!("start drag", start_x, start_y);
+                            self.mouse_state.set_start_drag(Some((start_x, start_y)));
+                            draw_uniform.set_circle_center(start_x, start_y);
                         }
                         (true, false) => {
-                            draw_uniform.set_drag(false);
+                            let initial_drag_position = self.mouse_state.start_drag();
+
+                            if initial_drag_position.is_none() {
+                                panic!("Logic error occured. Mouse state once finished pressing doesn't have initial drag position set.");
+                            }
+
+                            let (x, y) = initial_drag_position.unwrap();
+                            let (edge_x, edge_y) = self.mouse_state.position();
+                            let radius = compute_radius((x, y), (edge_x, edge_y));
+                            self.shape_stack.push(Shape::Circle { x, y, radius });
+
+                            // clear state
+                            self.mouse_state.set_start_drag(None);
+                            dbg!("stop drag");
+                            draw_uniform.set_circle_radius(0.0);
                         }
                         _ => {}
                     }
@@ -407,11 +427,13 @@ impl<'a> State<'a> {
             WindowEvent::CursorMoved { position, .. } => {
                 let (x, y) = (position.x as f32, position.y as f32);
 
-                self.mouse_state.update_position(x, y);
-
-                if self.mouse_state.pressed() {
-                    draw_uniform.compute_drag_radius(x, y);
+                if let Some(center) = self.mouse_state.start_drag() {
+                    let radius = compute_radius(center, (x, y));
+                    dbg!("dragging: radius", radius);
+                    self.draw_uniform.set_circle_radius(radius);
                 }
+
+                self.mouse_state.update_position(x, y);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -534,6 +556,26 @@ impl<'a> State<'a> {
             render_pass.set_bind_group(2, &self.draw_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
+
+            self.shape_stack.shapes().into_iter().for_each(|shape| {
+                let &Shape::Circle { x, y, radius } = shape;
+
+                let shape_uniform = DrawUniform {
+                    crosshair: self.draw_uniform.crosshair,
+                    circle_center_x: x,
+                    circle_center_y: y,
+                    circle_radius: radius,
+                };
+
+                self.queue.write_buffer(
+                    &self.draw_buffer,
+                    0,
+                    bytemuck::cast_slice(&[shape_uniform]),
+                );
+
+                render_pass.set_bind_group(2, &self.draw_bind_group, &[]);
+            });
+
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
 

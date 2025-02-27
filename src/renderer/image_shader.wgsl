@@ -16,10 +16,9 @@ struct FeatureUniform {
 
 struct DrawUniform {
     crosshair: u32,
-    drag: u32,
-    drag_start_x: f32,
-    drag_start_y: f32,
-    drag_radius: f32,
+    circle_center_x: f32,
+    circle_center_y: f32,
+    circle_radius: f32,
 }
 
 
@@ -192,15 +191,13 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     if draw_uniform.crosshair == 1u {
-        if draw_uniform.drag == 1u {
-            var pixel_coords = in.tex_coords * vec2(f32(feature_uniform.width), f32(feature_uniform.height));
-            var mouse_pixel = vec2(draw_uniform.drag_start_x, draw_uniform.drag_start_y);
+        var pixel_coords = in.tex_coords * vec2(f32(feature_uniform.width), f32(feature_uniform.height));
+        var mouse_pixel = vec2(draw_uniform.circle_center_x, draw_uniform.circle_center_y);
 
-            if distance(pixel_coords, mouse_pixel) < draw_uniform.drag_radius {
-                pixels.r = 0.0;
-                pixels.g = 1.0;
-                pixels.b = 1.0;
-            }
+        if distance(pixel_coords, mouse_pixel) < draw_uniform.circle_radius {
+            pixels.r = 0.0;
+            pixels.g = 1.0;
+            pixels.b = 1.0;
         }
     }
 
