@@ -1,4 +1,4 @@
-# her
+# iris
 
 <p align="center">
     <img src="tests/diaz.png" alt="Nick Diaz" width="220"/>
@@ -11,7 +11,7 @@ A PNG editor from scratch (well, as close to scratch as possible).
 
 As a decoder, this project uses the [PNG test suite](http://www.schaik.com/pngsuite/) to validate its ability to handle various PNG features and edge cases. Currently, png can decode and render images with an 8-bit color depth.
 
-The renderer supports various image processing features on the GPU. For a detailed look at its features, visit [FEATURES](https://github.com/friendlymatthew/png/tree/main/features#readme).
+The renderer supports various image processing features on the GPU.
 
 ## Usage
 

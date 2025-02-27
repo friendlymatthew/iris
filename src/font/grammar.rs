@@ -380,7 +380,7 @@ pub struct GlyphDescription {
 }
 
 impl GlyphDescription {
-    pub(crate) fn is_simple(&self) -> bool {
+    pub(crate) const fn is_simple(&self) -> bool {
         self.number_of_contours >= 0
     }
 }

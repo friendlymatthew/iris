@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use her::png::PngDecoder;
+use iris::png::PngDecoder;
 
 #[cfg(feature = "time")]
 use her::util::*;

@@ -8,7 +8,7 @@ pub struct DrawUniform {
 }
 
 impl DrawUniform {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             crosshair: 0,
             circle_center_x: 0.0,

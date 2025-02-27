@@ -557,7 +557,7 @@ impl<'a> State<'a> {
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
 
-            self.shape_stack.shapes().into_iter().for_each(|shape| {
+            self.shape_stack.shapes().iter().for_each(|shape| {
                 let &Shape::Circle { x, y, radius } = shape;
 
                 let shape_uniform = DrawUniform {
@@ -604,7 +604,7 @@ pub async fn run(png: Png) -> anyhow::Result<()> {
 
     let window = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(width, height))
-        .with_title("friendlymatthew/her")
+        .with_title("iris")
         .build(&event_loop)?;
 
     #[cfg(target_arch = "wasm32")]
