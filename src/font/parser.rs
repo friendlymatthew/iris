@@ -231,19 +231,14 @@ impl<'a> TrueTypeFontParser<'a> {
         num_of_long_hor_metrics: u16,
         num_glyphs: u16,
     ) -> Result<HMtxTable> {
-        let mut h_metrics = Vec::with_capacity(num_of_long_hor_metrics as usize);
-
-        for _ in 0..num_of_long_hor_metrics {
-            h_metrics.push(self.parse_long_horizontal_metric()?);
-        }
+        let h_metrics = self.read_list(
+            num_of_long_hor_metrics as usize,
+            Self::parse_long_horizontal_metric,
+        )?;
 
         let num_left_side_bearing = num_glyphs - num_of_long_hor_metrics;
 
-        let mut left_side_bearing = Vec::with_capacity(num_left_side_bearing as usize);
-
-        for _ in 0..num_left_side_bearing {
-            left_side_bearing.push(self.read_fword()?);
-        }
+        let left_side_bearing = self.read_list(num_left_side_bearing as usize, Self::read_fword)?;
 
         Ok(HMtxTable {
             h_metrics,
@@ -396,17 +391,10 @@ impl<'a> TrueTypeFontParser<'a> {
     }
 
     fn parse_simple_glyph(&mut self, number_of_contours: usize) -> Result<Glyph> {
-        let mut end_points_of_contours = Vec::with_capacity(number_of_contours);
-
-        for _ in 0..number_of_contours {
-            end_points_of_contours.push(self.read_u16()?);
-        }
+        let end_points_of_contours = self.read_list(number_of_contours, Self::read_u16)?;
 
         let instruction_length = self.read_u16()?;
-        let mut instructions = Vec::with_capacity(instruction_length as usize);
-        for _ in 0..instruction_length {
-            instructions.push(self.read_u8()?);
-        }
+        let instructions = self.read_list(instruction_length as usize, Self::read_u8)?;
 
         let number_of_points = *end_points_of_contours.last().unwrap() as usize + 1;
 
