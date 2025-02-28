@@ -135,17 +135,7 @@ pub struct TableRecord {
 }
 
 #[derive(Debug)]
-pub struct CMapTable(pub Vec<CMapSubTable>);
-
-#[derive(Debug)]
-pub struct CMapSubTable {
-    pub platform_id: Platform,
-    pub platform_specific_id: u16,
-    pub offset: u32,
-}
-
-#[derive(Debug)]
-pub enum CMapFormat {
+pub enum CMapSubtable {
     Zero(CMapFormat0),
     Two(CMapFormat2),
     Four(CMapFormat4),
@@ -182,7 +172,6 @@ pub struct CMapSubHeader {
 
 #[derive(Debug)]
 pub struct CMapFormat4 {
-    pub length: u16,
     pub language: u16,
     pub seg_count_x2: u16,
     pub search_range: u16,
@@ -278,6 +267,12 @@ pub struct UnicodeValueMap {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub struct PlatformDouble {
+    pub platform: Platform,
+    pub platform_specific_id: u16,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Platform {
     Unicode,
     Macintosh,
