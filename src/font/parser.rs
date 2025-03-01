@@ -8,7 +8,7 @@ use super::grammar::{
     TableTag, TrueTypeFontFile, UnsignedFWord,
 };
 
-use crate::font::grammar::{Platform, PlatformDouble};
+use crate::font::grammar::{IndexToLocFormat, Platform, PlatformDouble};
 use crate::util::read_bytes::{U16_BYTES, U32_BYTES, U64_BYTES, U8_BYTES};
 use crate::{eof, read};
 use anyhow::{bail, ensure, Result};
@@ -27,51 +27,67 @@ impl<'a> TrueTypeFontParser<'a> {
     pub fn parse(&mut self) -> Result<TrueTypeFontFile<'a>> {
         let font_directory = self.parse_font_directory()?;
 
-        let head = {
+        let head_table = {
             let head_table_record = font_directory.get_table_record(&TableTag::Head)?;
             self.jump_to_table_record(head_table_record)?;
 
             let offset = self.cursor;
             let head = self.parse_head_table()?;
-            debug_assert_eq!(self.cursor - offset, head_table_record.length as usize);
+            assert_eq!(self.cursor - offset, head_table_record.length as usize);
 
             head
         };
 
-        let hhea = {
+        let hhea_table = {
             let hhea_table_record = font_directory.get_table_record(&TableTag::HHea)?;
             self.jump_to_table_record(hhea_table_record)?;
 
             let offset = self.cursor;
             let hhea = self.parse_hhea_table()?;
-            debug_assert_eq!(self.cursor - offset, hhea_table_record.length as usize);
+            assert_eq!(self.cursor - offset, hhea_table_record.length as usize);
 
             hhea
         };
 
-        let maxp = {
+        let maxp_table = {
             let maxp_table_record = font_directory.get_table_record(&TableTag::MaxP)?;
             self.jump_to_table_record(maxp_table_record)?;
 
             let offset = self.cursor;
             let maxp = self.parse_maxp_table()?;
-            debug_assert_eq!(self.cursor - offset, maxp_table_record.length as usize);
+            assert_eq!(self.cursor - offset, maxp_table_record.length as usize);
 
             maxp
         };
 
-        let hmtx = {
+        let loca_table = {
+            let loca_table_record = font_directory.get_table_record(&TableTag::Loca)?;
+            self.jump_to_table_record(loca_table_record)?;
+
+            let offset = self.cursor;
+            let loca =
+                self.parse_loca_table(&head_table.index_to_loc_format, &maxp_table.num_glyphs)?;
+
+            assert_eq!(self.cursor - offset, loca_table_record.length as usize);
+
+            loca
+        };
+
+        dbg!(&loca_table);
+
+        let hmtx_table = {
             let hmtx_table_record = font_directory.get_table_record(&TableTag::HMtx)?;
             self.jump_to_table_record(&hmtx_table_record)?;
 
             let offset = self.cursor;
-            let htmx = self.parse_hmtx_table(hhea.num_of_long_hor_metrics, maxp.num_glyphs)?;
-            debug_assert_eq!(self.cursor - offset, hmtx_table_record.length as usize);
+            let htmx =
+                self.parse_hmtx_table(hhea_table.num_of_long_hor_metrics, maxp_table.num_glyphs)?;
+            assert_eq!(self.cursor - offset, hmtx_table_record.length as usize);
 
             htmx
         };
 
-        let cmap = {
+        let cmap_table = {
             let cmap_table_record = font_directory.get_table_record(&TableTag::CMap)?;
             self.jump_to_table_record(&cmap_table_record)?;
 
@@ -80,20 +96,28 @@ impl<'a> TrueTypeFontParser<'a> {
             cmap
         };
 
+        /*
         let glyph = {
             let glyph_table_record = font_directory.get_table_record(&TableTag::Glyf)?;
             self.jump_to_table_record(&glyph_table_record)?;
 
             let offset = self.cursor;
             let glyph = self.parse_glyph_table(maxp.num_glyphs)?;
-            debug_assert_eq!(self.cursor - offset, glyph_table_record.length as usize);
+            assert_eq!(self.cursor - offset, glyph_table_record.length as usize);
 
             glyph
         };
+         */
 
-        dbg!(&head, &hhea, &maxp, &hmtx, &cmap, &glyph);
-
-        Ok(TrueTypeFontFile { font_directory })
+        Ok(TrueTypeFontFile {
+            font_directory,
+            head_table,
+            hhea_table,
+            maxp_table,
+            loca_table,
+            hmtx_table,
+            cmap_table,
+        })
     }
 
     fn parse_font_directory(&mut self) -> Result<FontDirectory<'a>> {
@@ -157,22 +181,29 @@ impl<'a> TrueTypeFontParser<'a> {
             mac_style: self.read_u16()?,
             lowest_rec_ppem: self.read_u16()?,
             font_direction_hint: self.read_i16()?,
-            index_to_loc_format: {
-                let flag = self.read_i16()?;
-                ensure!(
-                    flag == 0 || flag == 1,
-                    "Expected boolean flag. Got: {}",
-                    flag
-                );
-
-                flag == 1
-            },
+            index_to_loc_format: IndexToLocFormat::try_from(self.read_i16()?)?,
             glyph_data_format: {
                 let b = self.read_i16()?;
                 ensure!(b == 0, "Expected data format to be 0. Got: {}.", b);
                 b
             },
         })
+    }
+
+    fn parse_loca_table(
+        &mut self,
+        index_to_loca_format: &IndexToLocFormat,
+        num_glyphs: &u16,
+    ) -> Result<Vec<u32>> {
+        let offsets = self.read_list(
+            *num_glyphs as usize + 1,
+            |parser| match index_to_loca_format {
+                IndexToLocFormat::Short => Ok(parser.read_u16()? as u32 * 2),
+                IndexToLocFormat::Long => parser.read_u32(),
+            },
+        )?;
+
+        Ok(offsets)
     }
 
     fn parse_hhea_table(&mut self) -> Result<HHeaTable> {
@@ -394,7 +425,7 @@ impl<'a> TrueTypeFontParser<'a> {
     fn parse_glyph_table(&mut self, num_glyphs: u16) -> Result<GlyphTable> {
         let mut glyphs = Vec::with_capacity(num_glyphs as usize);
 
-        for i in 0..num_glyphs {
+        for _ in 0..num_glyphs {
             let glyph_description = self.parse_glyph_description()?;
 
             // https://github.com/khaledhosny/ots/issues/120

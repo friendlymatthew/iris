@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
+
+use crate::util::read_bytes::{U16_BYTES, U8_BYTES};
 
 pub type ShortFrac = i16;
 pub type Fixed = i32;
@@ -12,6 +14,12 @@ pub type LongDateTime = i64;
 #[derive(Debug)]
 pub struct TrueTypeFontFile<'a> {
     pub font_directory: FontDirectory<'a>,
+    pub head_table: HeadTable,
+    pub hhea_table: HHeaTable,
+    pub maxp_table: MaxPTable,
+    pub loca_table: Vec<u32>,
+    pub hmtx_table: HMtxTable,
+    pub cmap_table: BTreeMap<CMapSubtable, Vec<PlatformDouble>>,
 }
 
 #[derive(Debug)]
@@ -307,8 +315,40 @@ pub struct HeadTable {
     pub mac_style: u16,
     pub lowest_rec_ppem: u16,
     pub font_direction_hint: i16,
-    pub index_to_loc_format: bool,
+    pub index_to_loc_format: IndexToLocFormat,
     pub glyph_data_format: i16,
+}
+
+#[derive(Debug)]
+pub enum IndexToLocFormat {
+    Short,
+    Long,
+}
+
+impl TryFrom<i16> for IndexToLocFormat {
+    type Error = anyhow::Error;
+
+    fn try_from(value: i16) -> std::result::Result<Self, Self::Error> {
+        ensure!(
+            value == 0 || value == 1,
+            "Expected boolean flag when parsing index to loc format."
+        );
+
+        if value == 0 {
+            return Ok(Self::Short);
+        }
+
+        return Ok(Self::Long);
+    }
+}
+
+impl IndexToLocFormat {
+    pub fn size(&self) -> usize {
+        match self {
+            Self::Short => U16_BYTES,
+            Self::Long => U8_BYTES,
+        }
+    }
 }
 
 #[derive(Debug)]
