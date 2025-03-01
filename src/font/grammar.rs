@@ -186,17 +186,14 @@ pub struct CMapFormat4 {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat6 {
-    pub length: u16,
     pub language: u16,
     pub first_code: u16,
-    pub entry_count: u16,
     pub glyph_index_array: Vec<u16>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat8 {
     // pub reserved: u16,
-    pub length: u32,
     pub language: u32,
     pub is_32: [u8; 65536],
     pub groups: Vec<CMapIndividualGroup>,

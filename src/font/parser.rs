@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::grammar::{
-    CMapFormat0, CMapFormat4, CMapSubtable, ComponentGlyph, ComponentGlyphArgument,
+    CMapFormat0, CMapFormat4, CMapFormat6, CMapSubtable, ComponentGlyph, ComponentGlyphArgument,
     ComponentGlyphFlag, ComponentGlyphTransformation, F2Dot14, FWord, Fixed, FontDirectory, Glyph,
     GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable, LongDateTime,
     LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType, SimpleGlyphFlag, TableRecord,
@@ -306,6 +306,7 @@ impl<'a> TrueTypeFontParser<'a> {
         let subtable = match format {
             0 => CMapSubtable::Zero(self.parse_cmap_subtable_format_0()?),
             4 => CMapSubtable::Four(self.parse_cmap_subtable_format_4()?),
+            6 => CMapSubtable::Six(self.parse_cmap_subtable_format_6()?),
             _ => todo!(),
         };
 
@@ -326,8 +327,8 @@ impl<'a> TrueTypeFontParser<'a> {
 
                 length
             }
-            4 => self.read_u16()? as usize,
-            2 | 6 | 8 | 10 | 12 | 13 | 14 => todo!(),
+            4 | 6 => self.read_u16()? as usize,
+            2 | 8 | 10 | 12 | 13 | 14 => todo!(),
             foreign => bail!("Unexpected cmap format: {}.", foreign),
         };
 
@@ -379,6 +380,19 @@ impl<'a> TrueTypeFontParser<'a> {
             start_codes,
             id_deltas,
             id_range_offset,
+            glyph_index_array,
+        })
+    }
+
+    fn parse_cmap_subtable_format_6(&mut self) -> Result<CMapFormat6> {
+        let language = self.read_u16()?;
+        let first_code = self.read_u16()?;
+        let entry_count = self.read_u16()?;
+        let glyph_index_array = self.read_list(entry_count as usize, Self::read_u16)?;
+
+        Ok(CMapFormat6 {
+            language,
+            first_code,
             glyph_index_array,
         })
     }
