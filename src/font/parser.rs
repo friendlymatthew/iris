@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
 
 use super::grammar::{
-    CMapFormat4, CMapSubtable, ComponentGlyph, ComponentGlyphArgument, ComponentGlyphFlag,
-    ComponentGlyphTransformation, F2Dot14, FWord, Fixed, FontDirectory, Glyph, GlyphDescription,
-    GlyphTable, HHeaTable, HMtxTable, HeadTable, LongDateTime, LongHorizontalMetric, MaxPTable,
-    OffsetSubTable, ScalarType, SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile,
-    UnsignedFWord,
+    CMapFormat0, CMapFormat4, CMapSubtable, ComponentGlyph, ComponentGlyphArgument,
+    ComponentGlyphFlag, ComponentGlyphTransformation, F2Dot14, FWord, Fixed, FontDirectory, Glyph,
+    GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable, LongDateTime,
+    LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType, SimpleGlyphFlag, TableRecord,
+    TableTag, TrueTypeFontFile, UnsignedFWord,
 };
 
 use crate::font::grammar::{Platform, PlatformDouble};
@@ -255,7 +255,6 @@ impl<'a> TrueTypeFontParser<'a> {
 
     fn parse_cmap_table(&mut self) -> Result<BTreeMap<CMapSubtable, Vec<PlatformDouble>>> {
         let cmap_offset = self.cursor;
-
         let version = self.read_u16()?;
         ensure!(
             version == 0,
@@ -298,9 +297,24 @@ impl<'a> TrueTypeFontParser<'a> {
     }
 
     fn parse_cmap_subtable(&mut self) -> Result<CMapSubtable> {
-        let format = self.read_u16()?;
         let offset = self.cursor;
+        let format = self.read_u16()?;
+        let length = self.validate_cmap_subtable_length(&format)?;
 
+        self.eof(length)?;
+
+        let subtable = match format {
+            0 => CMapSubtable::Zero(self.parse_cmap_subtable_format_0()?),
+            4 => CMapSubtable::Four(self.parse_cmap_subtable_format_4()?),
+            _ => todo!(),
+        };
+
+        ensure!(self.cursor - offset == length);
+
+        Ok(subtable)
+    }
+
+    fn validate_cmap_subtable_length(&mut self, format: &u16) -> Result<usize> {
         let subtable_length = match format {
             0 => {
                 let length = self.read_u16()? as usize;
@@ -315,18 +329,16 @@ impl<'a> TrueTypeFontParser<'a> {
             4 => self.read_u16()? as usize,
             2 | 6 | 8 | 10 | 12 | 13 | 14 => todo!(),
             foreign => bail!("Unexpected cmap format: {}.", foreign),
-        } - U16_BYTES;
-
-        self.eof(subtable_length)?;
-
-        let subtable = match format {
-            4 => CMapSubtable::Four(self.parse_cmap_subtable_format_4()?),
-            _ => todo!(),
         };
 
-        ensure!(self.cursor - offset == subtable_length);
+        Ok(subtable_length)
+    }
 
-        Ok(subtable)
+    fn parse_cmap_subtable_format_0(&mut self) -> Result<CMapFormat0> {
+        Ok(CMapFormat0 {
+            language: self.read_u16()?,
+            glyph_index_array: self.read_list(256, Self::read_u8)?,
+        })
     }
 
     fn parse_cmap_subtable_format_4(&mut self) -> Result<CMapFormat4> {

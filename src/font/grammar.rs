@@ -148,9 +148,8 @@ pub enum CMapSubtable {
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat0 {
-    pub length: u16,
     pub language: u16,
-    pub glyph_index_array: [u8; 256],
+    pub glyph_index_array: Vec<u8>,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
