@@ -253,7 +253,7 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_cmap_table(&mut self) -> Result<()> {
+    fn parse_cmap_table(&mut self) -> Result<BTreeMap<CMapSubtable, Vec<PlatformDouble>>> {
         let cmap_offset = self.cursor;
 
         let version = self.read_u16()?;
@@ -280,21 +280,27 @@ impl<'a> TrueTypeFontParser<'a> {
                 .push(platform_double);
         }
 
-        let _mapping_subtables = {
-            for (offset, _platform_double) in mapping_subtables {
-                self.jump(cmap_offset + offset, 0)?;
+        let mut subtables = BTreeMap::new();
 
-                let _cmap_subtable = self.parse_cmap_subtable()?;
+        for (offset, platform_doubles) in mapping_subtables {
+            self.jump(cmap_offset + offset, 0)?;
+
+            let cmap_subtable = self.parse_cmap_subtable()?;
+
+            if subtables.contains_key(&cmap_subtable) {
+                panic!("Can cmap subtables be duplicated?");
             }
-        };
 
-        todo!();
+            subtables.insert(cmap_subtable, platform_doubles);
+        }
+
+        Ok(subtables)
     }
 
     fn parse_cmap_subtable(&mut self) -> Result<CMapSubtable> {
         let format = self.read_u16()?;
-
         let offset = self.cursor;
+
         let subtable_length = match format {
             0 => {
                 let length = self.read_u16()? as usize;
@@ -331,7 +337,12 @@ impl<'a> TrueTypeFontParser<'a> {
         let range_shift = self.read_u16()?;
 
         let seg_count = seg_count_x2 as usize / 2;
-        let end_codes = self.read_list(seg_count, Self::read_u16)?;
+        let end_codes = {
+            let codes = self.read_list(seg_count, Self::read_u16)?;
+            ensure!(codes.len() > 0 && *codes.last().unwrap() == 0xFFFF);
+
+            codes
+        };
 
         let _reserved = self.read_u16()?;
         let start_codes = self.read_list(seg_count, Self::read_u16)?;
@@ -339,6 +350,11 @@ impl<'a> TrueTypeFontParser<'a> {
         let id_deltas = self.read_list(seg_count, Self::read_u16)?;
 
         let id_range_offset = self.read_list(seg_count, Self::read_u16)?;
+
+        if !id_range_offset.iter().all(|&id| id == 0) {
+            todo!("How do glyph index arrays look like when id range offsets are not zero?");
+        }
+
         let glyph_index_array = vec![];
 
         Ok(CMapFormat4 {

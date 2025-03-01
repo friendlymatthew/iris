@@ -134,7 +134,7 @@ pub struct TableRecord {
     pub length: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CMapSubtable {
     Zero(CMapFormat0),
     Two(CMapFormat2),
@@ -146,14 +146,14 @@ pub enum CMapSubtable {
     Fourteen(CMapFormat14),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat0 {
     pub length: u16,
     pub language: u16,
     pub glyph_index_array: [u8; 256],
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat2 {
     pub length: u16,
     pub language: u16,
@@ -162,7 +162,7 @@ pub struct CMapFormat2 {
     pub glyph_index_array: Vec<u16>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapSubHeader {
     pub first_code: u16,
     pub entry_count: u16,
@@ -170,7 +170,7 @@ pub struct CMapSubHeader {
     pub id_range_offset: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat4 {
     pub language: u16,
     pub seg_count_x2: u16,
@@ -185,7 +185,7 @@ pub struct CMapFormat4 {
     pub glyph_index_array: Vec<u16>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat6 {
     pub length: u16,
     pub language: u16,
@@ -194,7 +194,7 @@ pub struct CMapFormat6 {
     pub glyph_index_array: Vec<u16>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat8 {
     // pub reserved: u16,
     pub length: u32,
@@ -203,14 +203,14 @@ pub struct CMapFormat8 {
     pub groups: Vec<CMapIndividualGroup>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapIndividualGroup {
     pub start_char_code: u32,
     pub end_char_code: u32,
     pub start_glyph_code: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat10 {
     // pub format: u16,
     // pub reserved: u16,
@@ -221,7 +221,7 @@ pub struct CMapFormat10 {
     pub glyphs: Vec<u16>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat12 {
     // pub format: u16,
     // pub reserved: u16,
@@ -230,14 +230,14 @@ pub struct CMapFormat12 {
     pub groups: Vec<CMapIndividualGroup>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CMapFormat14 {
     // pub format: u16,
     pub length: u32,
     pub records: Vec<VariationSelectorRecord>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct VariationSelectorRecord {
     pub variation_selector: u32, // actually a u24
     pub default_uvs_offset: u32,
