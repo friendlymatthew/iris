@@ -390,6 +390,12 @@ pub enum Glyph {
     },
 }
 
+impl Glyph {
+    pub fn to_svg(&self) -> String {
+        todo!()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct SimpleGlyphFlag(pub u8);
 

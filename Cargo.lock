@@ -952,7 +952,7 @@ dependencies = [
 
 [[package]]
 name = "iris"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "bytemuck",
