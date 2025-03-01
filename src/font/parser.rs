@@ -82,12 +82,6 @@ impl<'a> TrueTypeFontParser<'a> {
 
         let glyph = {
             let glyph_table_record = font_directory.get_table_record(&TableTag::Glyf)?;
-            dbg!(
-                glyph_table_record.offset,
-                glyph_table_record.length,
-                glyph_table_record.offset + glyph_table_record.length
-            );
-
             self.jump_to_table_record(&glyph_table_record)?;
 
             let offset = self.cursor;
@@ -400,13 +394,11 @@ impl<'a> TrueTypeFontParser<'a> {
     fn parse_glyph_table(&mut self, num_glyphs: u16) -> Result<GlyphTable> {
         let mut glyphs = Vec::with_capacity(num_glyphs as usize);
 
-        for _ in 0..num_glyphs {
+        for i in 0..num_glyphs {
             let glyph_description = self.parse_glyph_description()?;
 
             // https://github.com/khaledhosny/ots/issues/120
             if glyph_description.number_of_contours == 0 {
-                let instruction_length = self.read_u16()?;
-                self.cursor += instruction_length as usize * U8_BYTES;
                 continue;
             }
 
