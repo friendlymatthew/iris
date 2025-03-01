@@ -20,6 +20,7 @@ pub struct TrueTypeFontFile<'a> {
     pub loca_table: Vec<u32>,
     pub hmtx_table: HMtxTable,
     pub cmap_table: BTreeMap<CMapSubtable, Vec<PlatformDouble>>,
+    pub glyph_table: GlyphTable,
 }
 
 #[derive(Debug)]
@@ -343,7 +344,7 @@ impl TryFrom<i16> for IndexToLocFormat {
 }
 
 impl IndexToLocFormat {
-    pub fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         match self {
             Self::Short => U16_BYTES,
             Self::Long => U8_BYTES,

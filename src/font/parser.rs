@@ -73,8 +73,6 @@ impl<'a> TrueTypeFontParser<'a> {
             loca
         };
 
-        dbg!(&loca_table);
-
         let hmtx_table = {
             let hmtx_table_record = font_directory.get_table_record(&TableTag::HMtx)?;
             self.jump_to_table_record(&hmtx_table_record)?;
@@ -96,18 +94,12 @@ impl<'a> TrueTypeFontParser<'a> {
             cmap
         };
 
-        /*
-        let glyph = {
+        let glyph_table = {
             let glyph_table_record = font_directory.get_table_record(&TableTag::Glyf)?;
             self.jump_to_table_record(&glyph_table_record)?;
 
-            let offset = self.cursor;
-            let glyph = self.parse_glyph_table(maxp.num_glyphs)?;
-            assert_eq!(self.cursor - offset, glyph_table_record.length as usize);
-
-            glyph
+            self.parse_glyph_table(&loca_table)?
         };
-         */
 
         Ok(TrueTypeFontFile {
             font_directory,
@@ -117,6 +109,7 @@ impl<'a> TrueTypeFontParser<'a> {
             loca_table,
             hmtx_table,
             cmap_table,
+            glyph_table,
         })
     }
 
@@ -422,13 +415,25 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_glyph_table(&mut self, num_glyphs: u16) -> Result<GlyphTable> {
-        let mut glyphs = Vec::with_capacity(num_glyphs as usize);
+    fn parse_glyph_table(&mut self, loca_table: &[u32]) -> Result<GlyphTable> {
+        let glyph_table_offset = self.cursor;
 
-        for _ in 0..num_glyphs {
-            let glyph_description = self.parse_glyph_description()?;
+        let num_glyphs = loca_table.len() - 1;
+        let mut glyph_table = Vec::new();
+
+        for i in 0..num_glyphs {
+            let glyph_relative_offset = loca_table[i] as usize;
+            let glyph_length = loca_table[i + 1] as usize - glyph_relative_offset;
 
             // https://github.com/khaledhosny/ots/issues/120
+            if glyph_length == 0 {
+                continue;
+            }
+
+            self.jump(glyph_table_offset + glyph_relative_offset, glyph_length)?;
+
+            let glyph_description = self.parse_glyph_description()?;
+
             if glyph_description.number_of_contours == 0 {
                 continue;
             }
@@ -439,10 +444,10 @@ impl<'a> TrueTypeFontParser<'a> {
                 self.parse_compound_glyph()?
             };
 
-            glyphs.push((glyph_description, glyph));
+            glyph_table.push((glyph_description, glyph));
         }
 
-        Ok(GlyphTable(glyphs))
+        Ok(GlyphTable(glyph_table))
     }
 
     fn parse_glyph_description(&mut self) -> Result<GlyphDescription> {
