@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 
 use super::grammar::{
-    CMapFormat0, CMapFormat4, CMapFormat6, CMapSubtable, ComponentGlyph, ComponentGlyphArgument,
-    ComponentGlyphFlag, ComponentGlyphTransformation, CompoundGlyph, F2Dot14, FWord, Fixed,
-    FontDirectory, Glyph, GlyphData, GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable,
-    LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType, SimpleGlyph,
-    SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
+    CMapFormat0, CMapFormat12, CMapFormat4, CMapIndividualGroup, CMapSubtable, ComponentGlyph,
+    ComponentGlyphArgument, ComponentGlyphFlag, ComponentGlyphTransformation, CompoundGlyph,
+    F2Dot14, FWord, Fixed, FontDirectory, Glyph, GlyphData, GlyphDescription, GlyphTable,
+    HHeaTable, HMtxTable, HeadTable, LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable,
+    ScalarType, SimpleGlyph, SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile,
+    UnsignedFWord,
 };
 
 use crate::font::grammar::{IndexToLocFormat, Platform, PlatformDouble};
@@ -188,7 +189,7 @@ impl<'a> TrueTypeFontParser<'a> {
         index_to_loca_format: &IndexToLocFormat,
         num_glyphs: &u16,
     ) -> Result<Vec<u32>> {
-        let offsets = self.read_list(
+        let offsets = self.read_vec(
             *num_glyphs as usize + 1,
             |parser| match index_to_loca_format {
                 IndexToLocFormat::Short => Ok(parser.read_u16()? as u32 * 2),
@@ -249,14 +250,14 @@ impl<'a> TrueTypeFontParser<'a> {
         num_of_long_hor_metrics: u16,
         num_glyphs: u16,
     ) -> Result<HMtxTable> {
-        let h_metrics = self.read_list(
+        let h_metrics = self.read_vec(
             num_of_long_hor_metrics as usize,
             Self::parse_long_horizontal_metric,
         )?;
 
         let num_left_side_bearing = num_glyphs - num_of_long_hor_metrics;
 
-        let left_side_bearing = self.read_list(num_left_side_bearing as usize, Self::read_fword)?;
+        let left_side_bearing = self.read_vec(num_left_side_bearing as usize, Self::read_fword)?;
 
         Ok(HMtxTable {
             h_metrics,
@@ -281,82 +282,87 @@ impl<'a> TrueTypeFontParser<'a> {
         );
 
         let number_of_subtables = self.read_u16()?;
-        let mut mapping_subtables = BTreeMap::new();
 
-        for _ in 0..number_of_subtables {
-            let platform_double = PlatformDouble {
-                platform: Platform::try_from(self.read_u16()?)?,
-                platform_specific_id: self.read_u16()?,
-            };
+        let subtable_map = {
+            let mut unique_offsets = BTreeMap::new();
+            for _ in 0..number_of_subtables {
+                let platform_double = PlatformDouble {
+                    platform: Platform::try_from(self.read_u16()?)?,
+                    platform_specific_id: self.read_u16()?,
+                };
 
-            let offset = self.read_u32()? as usize;
+                let offset = self.read_u32()?;
 
-            mapping_subtables
-                .entry(offset)
-                .or_insert_with(Vec::new)
-                .push(platform_double);
-        }
-
-        let mut subtables = BTreeMap::new();
-
-        for (offset, platform_doubles) in mapping_subtables {
-            self.jump(cmap_offset + offset, 0)?;
-
-            let cmap_subtable = self.parse_cmap_subtable()?;
-
-            if subtables.contains_key(&cmap_subtable) {
-                panic!("Can cmap subtables be duplicated?");
+                unique_offsets
+                    .entry(offset)
+                    .or_insert_with(Vec::new)
+                    .push(platform_double);
             }
 
-            subtables.insert(cmap_subtable, platform_doubles);
-        }
+            let mut subtable_map = BTreeMap::new();
+            for (offset, platform_doubles) in unique_offsets {
+                self.jump(cmap_offset + offset as usize, 0)?;
 
-        Ok(subtables)
+                if let Some(subtable) = self.parse_cmap_subtable()? {
+                    if subtable_map.contains_key(&subtable) {
+                        panic!("Can cmap subtables be duplicated?");
+                    }
+
+                    subtable_map.insert(subtable, platform_doubles);
+                }
+            }
+
+            subtable_map
+        };
+
+        Ok(subtable_map)
     }
 
-    fn parse_cmap_subtable(&mut self) -> Result<CMapSubtable> {
+    // A note about the CMap table formats:
+    // Many of the cmap formats are either obsolete or were designed to meet anticipated needs which never materialized.
+    // Modern font generation tools might not need to be able to write general-purpose cmaps in formats other than 4 and 12.
+    //
+    // Returns Ok(None) if that cmap subtable format is unsupported.
+    fn parse_cmap_subtable(&mut self) -> Result<Option<CMapSubtable>> {
         let offset = self.cursor;
-        let format = self.read_u16()?;
-        let length = self.validate_cmap_subtable_length(&format)?;
 
-        self.eof(length)?;
+        let (format, length) = self.parse_cmap_subtable_format_and_length()?;
 
         let subtable = match format {
             0 => CMapSubtable::Zero(self.parse_cmap_subtable_format_0()?),
             4 => CMapSubtable::Four(self.parse_cmap_subtable_format_4()?),
-            6 => CMapSubtable::Six(self.parse_cmap_subtable_format_6()?),
-            _ => todo!(),
+            12 => CMapSubtable::Twelve(self.parse_cmap_subtable_format_12()?),
+            2 | 6 | 8 | 10 | 13 | 14 => return Ok(None),
+            foreign => bail!("Received unrecognized cmap table format: {foreign}."),
         };
 
         ensure!(self.cursor - offset == length);
 
-        Ok(subtable)
+        Ok(Some(subtable))
     }
 
-    fn validate_cmap_subtable_length(&mut self, format: &u16) -> Result<usize> {
-        let subtable_length = match format {
-            0 => {
-                let length = self.read_u16()? as usize;
-                ensure!(
-                    length == 262,
-                    "Expected length 262 for cmap format 0 subtable. Got: {}.",
-                    length
-                );
-
-                length
+    fn parse_cmap_subtable_format_and_length(&mut self) -> Result<(u16, usize)> {
+        let format = self.read_u16()?;
+        let length = {
+            match format {
+                0 | 2 | 4 | 6 => self.read_u16()? as usize,
+                8 | 10 | 12 | 13 => {
+                    let reserved = self.read_u16()?;
+                    ensure!(reserved == 0);
+                    self.read_u32()? as usize
+                }
+                14 => self.read_u32()? as usize,
+                foreign => bail!("Received unrecognized cmap table format: {foreign}."),
             }
-            4 | 6 => self.read_u16()? as usize,
-            2 | 8 | 10 | 12 | 13 | 14 => todo!(),
-            foreign => bail!("Unexpected cmap format: {}.", foreign),
         };
 
-        Ok(subtable_length)
+        Ok((format, length))
     }
 
     fn parse_cmap_subtable_format_0(&mut self) -> Result<CMapFormat0> {
         Ok(CMapFormat0 {
             language: self.read_u16()?,
-            glyph_index_array: self.read_list(256, Self::read_u8)?,
+            glyph_index_array: self.read_vec(256, Self::read_u8)?,
         })
     }
 
@@ -369,18 +375,18 @@ impl<'a> TrueTypeFontParser<'a> {
 
         let seg_count = seg_count_x2 as usize / 2;
         let end_codes = {
-            let codes = self.read_list(seg_count, Self::read_u16)?;
+            let codes = self.read_vec(seg_count, Self::read_u16)?;
             ensure!(codes.len() > 0 && *codes.last().unwrap() == 0xFFFF);
 
             codes
         };
 
         let _reserved = self.read_u16()?;
-        let start_codes = self.read_list(seg_count, Self::read_u16)?;
+        let start_codes = self.read_vec(seg_count, Self::read_u16)?;
 
-        let id_deltas = self.read_list(seg_count, Self::read_u16)?;
+        let id_deltas = self.read_vec(seg_count, Self::read_u16)?;
 
-        let id_range_offset = self.read_list(seg_count, Self::read_u16)?;
+        let id_range_offset = self.read_vec(seg_count, Self::read_u16)?;
 
         if !id_range_offset.iter().all(|&id| id == 0) {
             todo!("How do glyph index arrays look like when id range offsets are not zero?");
@@ -402,16 +408,21 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_cmap_subtable_format_6(&mut self) -> Result<CMapFormat6> {
-        let language = self.read_u16()?;
-        let first_code = self.read_u16()?;
-        let entry_count = self.read_u16()?;
-        let glyph_index_array = self.read_list(entry_count as usize, Self::read_u16)?;
+    fn parse_cmap_subtable_format_12(&mut self) -> Result<CMapFormat12> {
+        let language = self.read_u32()?;
+        let n_groups = self.read_u32()?;
 
-        Ok(CMapFormat6 {
+        Ok(CMapFormat12 {
             language,
-            first_code,
-            glyph_index_array,
+            groups: self.read_vec(n_groups as usize, Self::parse_cmap_individual_group)?,
+        })
+    }
+
+    fn parse_cmap_individual_group(&mut self) -> Result<CMapIndividualGroup> {
+        Ok(CMapIndividualGroup {
+            start_char_code: self.read_u32()?,
+            end_char_code: self.read_u32()?,
+            start_glyph_code: self.read_u32()?,
         })
     }
 
@@ -461,10 +472,10 @@ impl<'a> TrueTypeFontParser<'a> {
     }
 
     fn parse_simple_glyph(&mut self, number_of_contours: usize) -> Result<SimpleGlyph> {
-        let end_points_of_contours = self.read_list(number_of_contours, Self::read_u16)?;
+        let end_points_of_contours = self.read_vec(number_of_contours, Self::read_u16)?;
 
         let instruction_length = self.read_u16()?;
-        let instructions = self.read_list(instruction_length as usize, Self::read_u8)?;
+        let instructions = self.read_vec(instruction_length as usize, Self::read_u8)?;
 
         let number_of_points = *end_points_of_contours.last().unwrap() as usize + 1;
 
@@ -611,7 +622,7 @@ impl<'a> TrueTypeFontParser<'a> {
         Ok(())
     }
 
-    fn read_list<T>(
+    fn read_vec<T>(
         &mut self,
         capacity: usize,
         read_fn: impl Fn(&mut Self) -> Result<T>,
