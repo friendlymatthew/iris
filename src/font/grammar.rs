@@ -443,6 +443,7 @@ impl Glyph {
             start_index = end_index + 1;
         }
 
+        out += &format!("ctx{key}.lineWidth = 9;\n");
         out += &format!("ctx{key}.stroke();\n");
 
         out
