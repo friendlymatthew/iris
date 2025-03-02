@@ -3,3 +3,5 @@ profile.json
 
 /fuzz/out
 /fuzz/target
+
+/src/font/glyph_playground/glyph.js

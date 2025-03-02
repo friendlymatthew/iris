@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use super::grammar::{
     CMapFormat0, CMapFormat4, CMapFormat6, CMapSubtable, ComponentGlyph, ComponentGlyphArgument,
     ComponentGlyphFlag, ComponentGlyphTransformation, CompoundGlyph, F2Dot14, FWord, Fixed,
-    FontDirectory, Glyph, GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable,
+    FontDirectory, Glyph, GlyphData, GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable,
     LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType, SimpleGlyph,
     SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
 };
@@ -419,7 +419,7 @@ impl<'a> TrueTypeFontParser<'a> {
         let glyph_table_offset = self.cursor;
 
         let num_glyphs = loca_table.len() - 1;
-        let mut glyph_table = Vec::new();
+        let mut glyphs = Vec::new();
 
         for i in 0..num_glyphs {
             let glyph_relative_offset = loca_table[i] as usize;
@@ -432,24 +432,22 @@ impl<'a> TrueTypeFontParser<'a> {
 
             self.jump(glyph_table_offset + glyph_relative_offset, glyph_length)?;
 
-            let glyph_description = self.parse_glyph_description()?;
+            let description = self.parse_glyph_description()?;
 
-            if glyph_description.number_of_contours == 0 {
+            if description.number_of_contours == 0 {
                 continue;
             }
 
-            let glyph = if glyph_description.is_simple() {
-                Glyph::Simple(
-                    self.parse_simple_glyph(glyph_description.number_of_contours as usize)?,
-                )
+            let data = if description.is_simple() {
+                GlyphData::Simple(self.parse_simple_glyph(description.number_of_contours as usize)?)
             } else {
-                Glyph::Compound(self.parse_compound_glyph()?)
+                GlyphData::Compound(self.parse_compound_glyph()?)
             };
 
-            glyph_table.push((glyph_description, glyph));
+            glyphs.push(Glyph { description, data });
         }
 
-        Ok(GlyphTable(glyph_table))
+        Ok(GlyphTable { glyphs })
     }
 
     fn parse_glyph_description(&mut self) -> Result<GlyphDescription> {
@@ -651,34 +649,55 @@ impl<'a> TrueTypeFontParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::font::grammar::DrawCanvas;
 
     use super::*;
     use std::fs;
+    use std::fs::File;
+    use std::io::Write;
 
     #[test]
     fn test_parse_lato() -> Result<()> {
         let ttf_file = fs::read("./src/font/Lato-Regular.ttf")?;
-        let ttf = TrueTypeFontParser::new(&ttf_file).parse()?;
+        let _ttf = TrueTypeFontParser::new(&ttf_file).parse()?;
 
         Ok(())
     }
 
+    fn dom_new_canvas(i: usize, width: usize, height: usize) -> String {
+        let mut out = String::new();
+        out += &format!(
+            "const newCanvas{} = document.createElement(\"canvas\");\n",
+            i
+        );
+        out += &format!("newCanvas{}.width = {};\n", i, width);
+        out += &format!("newCanvas{}.height = {};\n", i, height);
+
+        out
+    }
+
     #[test]
-    fn test_lato_glyph() -> Result<()> {
+    fn test_render_glyphs() -> Result<()> {
         let ttf_file = fs::read("./src/font/Lato-Regular.ttf")?;
         let ttf = TrueTypeFontParser::new(&ttf_file).parse()?;
 
-        let mut glyph_per_canvas = Vec::new();
+        let mut render_js_code = String::new();
+        render_js_code += "const contentDiv = document.getElementById(\"content\")\n";
 
-        for (_glyph_description, glyph) in &ttf.glyph_table.0 {
-            glyph_per_canvas.push(match glyph {
-                Glyph::Simple(glyph) => glyph.to_canvas(),
-                Glyph::Compound(_) => continue,
-            });
+        for (i, glyph) in ttf.glyph_table.glyphs.iter().enumerate() {
+            if !glyph.is_simple() {
+                continue;
+            }
+
+            render_js_code +=
+                &dom_new_canvas(i, glyph.description.width(), glyph.description.height());
+            render_js_code += &format!("const ctx{} = newCanvas{}.getContext(\"2d\");\n", i, i);
+
+            render_js_code += &glyph.draw_to_canvas(i);
+            render_js_code += &format!("contentDiv.appendChild(newCanvas{});\n\n", i);
         }
 
-        println!("{}", &glyph_per_canvas[0]);
+        let mut file = File::create("./src/font/glyph_playground/glyph.js")?;
+        file.write_all(render_js_code.as_bytes())?;
 
         Ok(())
     }

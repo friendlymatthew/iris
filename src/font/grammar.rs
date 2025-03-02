@@ -400,7 +400,54 @@ pub struct HMtxTable {
 }
 
 #[derive(Debug)]
-pub struct GlyphTable(pub Vec<(GlyphDescription, Glyph)>);
+pub struct GlyphTable {
+    pub glyphs: Vec<Glyph>,
+}
+
+#[derive(Debug)]
+pub struct Glyph {
+    pub description: GlyphDescription,
+    pub data: GlyphData,
+}
+
+impl Glyph {
+    pub fn is_simple(&self) -> bool {
+        matches!(self.data, GlyphData::Simple(_))
+    }
+
+    pub fn draw_to_canvas(&self, key: usize) -> String {
+        let GlyphData::Simple(simple_glyph) = &self.data else {
+            todo!("how does compound glyphs look on canvas?");
+        };
+
+        let mut out = String::new();
+        out += &format!("ctx{key}.translate(0, newCanvas{key}.height);\n");
+        out += &format!("ctx{key}.scale(1, -1);\n");
+
+        out += &format!("ctx{key}.beginPath()\n");
+
+        let mut start_index = 0;
+
+        for end_index in &simple_glyph.end_points_of_contours {
+            let end_index = *end_index as usize;
+
+            let (x_start, y_start) = simple_glyph.coordinates[start_index];
+            out += &format!("ctx{key}.moveTo({}, {});\n", x_start, y_start);
+            for i in start_index + 1..=end_index {
+                let (x, y) = simple_glyph.coordinates[i];
+                out += &format!("ctx{key}.lineTo({}, {});\n", x, y);
+            }
+
+            out += &format!("ctx{key}.closePath();\n");
+
+            start_index = end_index + 1;
+        }
+
+        out += &format!("ctx{key}.stroke();\n");
+
+        out
+    }
+}
 
 #[derive(Debug)]
 pub struct GlyphDescription {
@@ -419,25 +466,16 @@ impl GlyphDescription {
     pub fn height(&self) -> usize {
         (self.y_max - self.y_min) as usize
     }
-}
 
-impl GlyphDescription {
     pub(crate) const fn is_simple(&self) -> bool {
         self.number_of_contours >= 0
     }
 }
 
 #[derive(Debug)]
-pub enum Glyph {
+pub enum GlyphData {
     Simple(SimpleGlyph),
     Compound(CompoundGlyph),
-}
-
-pub trait DrawCanvas {
-    const CANVAS_WIDTH: usize = 500;
-    const CANVAS_HEIGHT: usize = 500;
-
-    fn to_canvas(&self) -> String;
 }
 
 #[derive(Debug)]
@@ -447,37 +485,6 @@ pub struct SimpleGlyph {
     pub instructions: Vec<u8>,
     pub flags: Vec<SimpleGlyphFlag>,
     pub coordinates: Vec<(i16, i16)>,
-}
-
-impl DrawCanvas for SimpleGlyph {
-    fn to_canvas(&self) -> String {
-        let mut out = String::new();
-
-        out += "ctx.translate(0, canvas.height);\n";
-        out += "ctx.scale(1, -1);\n";
-
-        out += "ctx.beginPath()\n";
-
-        for &(x, y) in &self.coordinates {
-            out += &format!("ctx.moveTo({}, {});\n", x, y);
-            out += &format!("ctx.arc({}, {}, 3, 0, 2 * Math.PI);\n\n", x, y);
-        }
-
-        out += "ctx.fill();\n";
-
-        out
-    }
-}
-
-#[derive(Debug)]
-pub struct CompoundGlyph {
-    pub components: Vec<ComponentGlyph>,
-}
-
-impl DrawCanvas for ComponentGlyph {
-    fn to_canvas(&self) -> String {
-        todo!()
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -510,9 +517,8 @@ impl SimpleGlyphFlag {
 }
 
 #[derive(Debug)]
-pub enum ComponentGlyphArgument {
-    Point(u16),
-    Coord(i16),
+pub struct CompoundGlyph {
+    pub components: Vec<ComponentGlyph>,
 }
 
 #[derive(Debug)]
@@ -522,6 +528,12 @@ pub struct ComponentGlyph {
     pub arg_1: ComponentGlyphArgument,
     pub arg_2: ComponentGlyphArgument,
     pub transformation: ComponentGlyphTransformation,
+}
+
+#[derive(Debug)]
+pub enum ComponentGlyphArgument {
+    Point(u16),
+    Coord(i16),
 }
 
 #[derive(Debug, Clone, Copy)]
