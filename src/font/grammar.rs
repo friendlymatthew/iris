@@ -411,7 +411,7 @@ pub struct Glyph {
 }
 
 impl Glyph {
-    pub fn is_simple(&self) -> bool {
+    pub const fn is_simple(&self) -> bool {
         matches!(self.data, GlyphData::Simple(_))
     }
 
@@ -421,8 +421,8 @@ impl Glyph {
         };
 
         let mut out = String::new();
-        out += &format!("ctx{key}.translate(0, newCanvas{key}.height);\n");
-        out += &format!("ctx{key}.scale(1, -1);\n");
+        out += &format!("ctx{key}.translate(0, newCanvas{key}.height - 300);\n");
+        out += &format!("ctx{key}.scale(0.5, -0.5);\n");
 
         out += &format!("ctx{key}.beginPath()\n");
 
@@ -460,11 +460,11 @@ pub struct GlyphDescription {
 }
 
 impl GlyphDescription {
-    pub fn width(&self) -> usize {
+    pub const fn width(&self) -> usize {
         (self.x_max - self.x_min) as usize
     }
 
-    pub fn height(&self) -> usize {
+    pub const fn height(&self) -> usize {
         (self.y_max - self.y_min) as usize
     }
 

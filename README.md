@@ -64,6 +64,7 @@ https://www.shadertoy.com/view/4tSyzy<br>
 
 https://faultlore.com/blah/text-hates-you/<br>
 https://developer.apple.com/fonts/TrueType-Reference-Manual/<br>
+https://www.youtube.com/watch?v=SO83KQuuZvg<br>
 
 ### Miscellaneous
 

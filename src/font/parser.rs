@@ -708,11 +708,8 @@ mod tests {
                 continue;
             }
 
-            render_js_code += &dom_new_canvas(
-                i,
-                glyph.description.width() + 1000,
-                glyph.description.height() + 1000,
-            );
+            render_js_code +=
+                &dom_new_canvas(i, glyph.description.width(), glyph.description.height());
             render_js_code += &format!("const ctx{} = newCanvas{}.getContext(\"2d\");\n", i, i);
 
             render_js_code += &glyph.draw_to_canvas(i);
