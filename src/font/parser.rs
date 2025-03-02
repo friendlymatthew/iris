@@ -2,10 +2,10 @@ use std::collections::BTreeMap;
 
 use super::grammar::{
     CMapFormat0, CMapFormat4, CMapFormat6, CMapSubtable, ComponentGlyph, ComponentGlyphArgument,
-    ComponentGlyphFlag, ComponentGlyphTransformation, F2Dot14, FWord, Fixed, FontDirectory, Glyph,
-    GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable, LongDateTime,
-    LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType, SimpleGlyphFlag, TableRecord,
-    TableTag, TrueTypeFontFile, UnsignedFWord,
+    ComponentGlyphFlag, ComponentGlyphTransformation, CompoundGlyph, F2Dot14, FWord, Fixed,
+    FontDirectory, Glyph, GlyphDescription, GlyphTable, HHeaTable, HMtxTable, HeadTable,
+    LongDateTime, LongHorizontalMetric, MaxPTable, OffsetSubTable, ScalarType, SimpleGlyph,
+    SimpleGlyphFlag, TableRecord, TableTag, TrueTypeFontFile, UnsignedFWord,
 };
 
 use crate::font::grammar::{IndexToLocFormat, Platform, PlatformDouble};
@@ -439,9 +439,11 @@ impl<'a> TrueTypeFontParser<'a> {
             }
 
             let glyph = if glyph_description.is_simple() {
-                self.parse_simple_glyph(glyph_description.number_of_contours as usize)?
+                Glyph::Simple(
+                    self.parse_simple_glyph(glyph_description.number_of_contours as usize)?,
+                )
             } else {
-                self.parse_compound_glyph()?
+                Glyph::Compound(self.parse_compound_glyph()?)
             };
 
             glyph_table.push((glyph_description, glyph));
@@ -460,7 +462,7 @@ impl<'a> TrueTypeFontParser<'a> {
         })
     }
 
-    fn parse_simple_glyph(&mut self, number_of_contours: usize) -> Result<Glyph> {
+    fn parse_simple_glyph(&mut self, number_of_contours: usize) -> Result<SimpleGlyph> {
         let end_points_of_contours = self.read_list(number_of_contours, Self::read_u16)?;
 
         let instruction_length = self.read_u16()?;
@@ -506,7 +508,7 @@ impl<'a> TrueTypeFontParser<'a> {
             y_coordinates.push(prev_y);
         }
 
-        Ok(Glyph::Simple {
+        Ok(SimpleGlyph {
             end_points_of_contours,
             instruction_length,
             instructions,
@@ -530,7 +532,7 @@ impl<'a> TrueTypeFontParser<'a> {
         Ok(Some(delta))
     }
 
-    fn parse_compound_glyph(&mut self) -> Result<Glyph> {
+    fn parse_compound_glyph(&mut self) -> Result<CompoundGlyph> {
         let mut components = Vec::new();
         let mut flag = ComponentGlyphFlag(self.read_u16()?);
 
@@ -593,7 +595,7 @@ impl<'a> TrueTypeFontParser<'a> {
             flag = ComponentGlyphFlag(self.read_u16()?);
         }
 
-        Ok(Glyph::Compound { components })
+        Ok(CompoundGlyph { components })
     }
 
     eof!();
@@ -649,13 +651,34 @@ impl<'a> TrueTypeFontParser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::font::grammar::DrawCanvas;
+
     use super::*;
     use std::fs;
 
     #[test]
     fn test_parse_lato() -> Result<()> {
         let ttf_file = fs::read("./src/font/Lato-Regular.ttf")?;
-        let _parser = TrueTypeFontParser::new(&ttf_file).parse()?;
+        let ttf = TrueTypeFontParser::new(&ttf_file).parse()?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_lato_glyph() -> Result<()> {
+        let ttf_file = fs::read("./src/font/Lato-Regular.ttf")?;
+        let ttf = TrueTypeFontParser::new(&ttf_file).parse()?;
+
+        let mut glyph_per_canvas = Vec::new();
+
+        for (_glyph_description, glyph) in &ttf.glyph_table.0 {
+            glyph_per_canvas.push(match glyph {
+                Glyph::Simple(glyph) => glyph.to_canvas(),
+                Glyph::Compound(_) => continue,
+            });
+        }
+
+        println!("{}", &glyph_per_canvas[0]);
 
         Ok(())
     }

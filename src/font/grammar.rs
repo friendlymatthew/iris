@@ -412,6 +412,16 @@ pub struct GlyphDescription {
 }
 
 impl GlyphDescription {
+    pub fn width(&self) -> usize {
+        (self.x_max - self.x_min) as usize
+    }
+
+    pub fn height(&self) -> usize {
+        (self.y_max - self.y_min) as usize
+    }
+}
+
+impl GlyphDescription {
     pub(crate) const fn is_simple(&self) -> bool {
         self.number_of_contours >= 0
     }
@@ -419,20 +429,53 @@ impl GlyphDescription {
 
 #[derive(Debug)]
 pub enum Glyph {
-    Simple {
-        end_points_of_contours: Vec<u16>,
-        instruction_length: u16,
-        instructions: Vec<u8>,
-        flags: Vec<SimpleGlyphFlag>,
-        coordinates: Vec<(i16, i16)>,
-    },
-    Compound {
-        components: Vec<ComponentGlyph>,
-    },
+    Simple(SimpleGlyph),
+    Compound(CompoundGlyph),
 }
 
-impl Glyph {
-    pub fn to_svg(&self) -> String {
+pub trait DrawCanvas {
+    const CANVAS_WIDTH: usize = 500;
+    const CANVAS_HEIGHT: usize = 500;
+
+    fn to_canvas(&self) -> String;
+}
+
+#[derive(Debug)]
+pub struct SimpleGlyph {
+    pub end_points_of_contours: Vec<u16>,
+    pub instruction_length: u16,
+    pub instructions: Vec<u8>,
+    pub flags: Vec<SimpleGlyphFlag>,
+    pub coordinates: Vec<(i16, i16)>,
+}
+
+impl DrawCanvas for SimpleGlyph {
+    fn to_canvas(&self) -> String {
+        let mut out = String::new();
+
+        out += "ctx.translate(0, canvas.height);\n";
+        out += "ctx.scale(1, -1);\n";
+
+        out += "ctx.beginPath()\n";
+
+        for &(x, y) in &self.coordinates {
+            out += &format!("ctx.moveTo({}, {});\n", x, y);
+            out += &format!("ctx.arc({}, {}, 3, 0, 2 * Math.PI);\n\n", x, y);
+        }
+
+        out += "ctx.fill();\n";
+
+        out
+    }
+}
+
+#[derive(Debug)]
+pub struct CompoundGlyph {
+    pub components: Vec<ComponentGlyph>,
+}
+
+impl DrawCanvas for ComponentGlyph {
+    fn to_canvas(&self) -> String {
         todo!()
     }
 }
